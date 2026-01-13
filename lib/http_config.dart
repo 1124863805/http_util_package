@@ -1,3 +1,6 @@
+import 'response_parser.dart';
+import 'parsers/standard_response_parser.dart';
+
 /// 日志打印模式
 enum LogMode {
   /// 完整链路模式（推荐）- 响应时一起打印请求+响应+耗时
@@ -25,6 +28,34 @@ class HttpConfig {
   /// 动态请求头构建器（每次请求时调用）
   /// 返回的 Map 会合并到请求头中
   final Future<Map<String, String>> Function()? dynamicHeaderBuilder;
+
+  /// 响应解析器（可选，默认使用 StandardResponseParser）
+  /// 用于将 Dio Response 转换为用户定义的 Response
+  ///
+  /// 如果不提供，将使用默认的 StandardResponseParser（处理标准结构：{code: int, message: String, data: dynamic}）
+  ///
+  /// 可以使用 PathBasedResponseParser 来支持不同路径使用不同解析器
+  ///
+  /// 示例：
+  /// ```dart
+  /// // 使用默认解析器（不传递 responseParser）
+  /// HttpConfig(baseUrl: 'https://api.example.com')
+  ///
+  /// // 或自定义解析器
+  /// responseParser: StandardResponseParser()
+  /// ```
+  ///
+  /// 或使用路径匹配：
+  /// ```dart
+  /// responseParser: PathBasedResponseParser(
+  ///   matchers: [
+  ///     PathMatcher(pattern: RegExp(r'^/api/v1/.*'), parser: V1Parser()),
+  ///     PathMatcher(pattern: RegExp(r'^/api/v2/.*'), parser: V2Parser()),
+  ///   ],
+  ///   defaultParser: StandardResponseParser(),
+  /// )
+  /// ```
+  final ResponseParser responseParser;
 
   /// 网络错误提示消息的键（用于国际化）
   /// 如果为 null，则使用默认消息
@@ -56,6 +87,7 @@ class HttpConfig {
 
   HttpConfig({
     required this.baseUrl,
+    ResponseParser? responseParser, // 可选参数，默认使用 StandardResponseParser
     this.staticHeaders,
     this.dynamicHeaderBuilder,
     this.networkErrorKey,
@@ -64,5 +96,5 @@ class HttpConfig {
     this.logPrintBody = true,
     this.logMode = LogMode.complete,
     this.logShowRequestHint = true,
-  });
+  }) : responseParser = responseParser ?? StandardResponseParser();
 }

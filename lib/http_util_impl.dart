@@ -1,8 +1,9 @@
 import 'package:dio/dio.dart' as dio_package;
 import 'http_config.dart';
-import 'api_response.dart';
+import 'response.dart';
 import 'http_method.dart';
 import 'log_interceptor.dart';
+import 'simple_error_response.dart';
 
 /// HTTP 请求工具类
 /// 基于 Dio 封装，支持配置化的请求头注入
@@ -24,8 +25,6 @@ class HttpUtil {
     _config = config;
     // 重置 Dio 实例，以便应用新配置
     _dioInstance = null;
-    // 配置 ApiResponse 的错误处理器
-    ApiResponse.setErrorHandler(config.onError);
   }
 
   /// 获取 Dio 实例（公开访问，方便特殊处理）
@@ -190,24 +189,25 @@ extension HttpUtilSafeCall on HttpUtil {
   static HttpConfig? get _config => HttpUtil._config;
 
   /// 处理网络错误（统一提示）
-  ApiResponse<T> _handleNetworkError<T>() {
+  /// 返回一个表示网络错误的 Response
+  /// 注意：这里返回的 Response 需要由用户通过 ResponseParser 定义
+  /// 但为了错误处理，我们创建一个简单的错误 Response
+  Response<T> _handleNetworkError<T>() {
     final config = _config;
-    if (config == null) {
-      return ApiResponse<T>(code: -1, message: '网络错误，请稍后重试！', data: null);
+    final errorMessage = config?.networkErrorKey ?? '网络错误，请稍后重试！';
+
+    if (config?.onError != null) {
+      config!.onError!(errorMessage);
     }
 
-    final errorMessage = config.networkErrorKey ?? '网络错误，请稍后重试！';
-
-    if (config.onError != null) {
-      config.onError!(errorMessage);
-    }
-
-    return ApiResponse<T>(code: -1, message: errorMessage, data: null);
+    // 返回一个简单的错误 Response
+    // 用户应该在自己的 ResponseParser 中处理网络错误，这里只是兜底
+    return SimpleErrorResponse<T>(errorMessage);
   }
 
   /// 发送请求（自动处理异常，失败时自动提示）
   /// [method] 请求方式：必须使用 hm.get、hm.post 等常量
-  Future<ApiResponse<T>> send<T>({
+  Future<Response<T>> send<T>({
     required String method,
     required String path,
     dynamic data,
@@ -227,10 +227,25 @@ extension HttpUtilSafeCall on HttpUtil {
         return _handleNetworkError<T>();
       }
 
-      final response = ApiResponse<T>.fromResponse(rawResponse);
+      // 使用用户配置的解析器解析响应
+      final config = _config;
+      if (config == null) {
+        throw StateError('HttpUtil 未配置，请先调用 HttpUtil.configure() 进行配置');
+      }
+
+      final response = config.responseParser.parse<T>(rawResponse);
+
+      // 自动处理错误（如果用户实现了 handleError 方法）
       if (!response.isSuccess) {
         response.handleError();
+
+        // 如果用户没有实现 handleError，使用配置的 onError 回调
+        final errorMessage = response.errorMessage;
+        if (errorMessage != null && config.onError != null) {
+          config.onError!(errorMessage);
+        }
       }
+
       return response;
     } catch (e) {
       if (e is dio_package.DioException) {
