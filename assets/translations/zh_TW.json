@@ -49,5 +49,17 @@
   "add_or_edit_birth_info": "添加或修改生辰信息",
   "today_yunshi": "今日運勢內容",
   "month_yunshi": "本月運勢內容",
-  "language": "語言"
+  "language": "語言",
+  "function_entrance": "功能入口",
+  "username": "用戶名",
+  "password": "密碼",
+  "tip": "提示",
+  "please_input_name": "請輸入名稱",
+  "please_select_gender": "請選擇性別",
+  "please_select_birthday": "請選擇生日",
+  "please_input_birth_place": "請輸入出生地",
+  "save_changes": "保存修改",
+  "edit_success": "修改成功",
+  "add_success": "添加成功",
+  "privacy_content": "歡迎使用合十 App！\n\n我們非常重視您的隱私保護。在使用本應用前，請您仔細閱讀並同意以下隱私政策：\n\n1. 信息收集\n我們僅收集提供服務所必需的信息，包括但不限於設備信息、使用日誌等。\n\n2. 信息使用\n我們使用收集的信息來改進服務質量、提供個性化體驗，並確保應用安全運行。\n\n3. 信息保護\n我們採用行業標準的安全措施保護您的個人信息，防止未經授權的訪問、使用或泄露。\n\n4. 信息共享\n我們不會向第三方出售、交易或轉讓您的個人信息，除非獲得您的明確同意或法律法規要求。\n\n5. 用戶權利\n您有權訪問、更正、刪除您的個人信息，或撤回同意。\n\n6. 政策更新\n我們可能會不定期更新本隱私政策，更新後的政策將在應用內公佈。\n\n繼續使用本應用即表示您同意本隱私政策。"
 }

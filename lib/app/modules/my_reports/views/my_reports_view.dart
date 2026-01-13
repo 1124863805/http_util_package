@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-
 import 'package:get/get.dart';
+import 'package:easy_localization/easy_localization.dart';
+import '../../../../generated/locale_keys.g.dart';
 
 import '../controllers/my_reports_controller.dart';
 
@@ -10,13 +11,13 @@ class MyReportsView extends GetView<MyReportsController> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('我的报告'),
+        title: Text(context.tr(LocaleKeys.my_reports)),
         centerTitle: true,
       ),
-      body: const Center(
+      body: Center(
         child: Text(
-          '我的报告',
-          style: TextStyle(fontSize: 20),
+          context.tr(LocaleKeys.my_reports),
+          style: const TextStyle(fontSize: 20),
         ),
       ),
     );

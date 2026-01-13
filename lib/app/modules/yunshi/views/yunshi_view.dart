@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:easy_localization/easy_localization.dart';
+import '../../../../generated/locale_keys.g.dart';
 
 import '../controllers/yunshi_controller.dart';
 import '../../daily_yunshi/views/daily_yunshi_view.dart';
@@ -12,13 +14,13 @@ class YunshiView extends GetView<YunshiController> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('运势'),
+        title: Text(context.tr(LocaleKeys.yunshi)),
         centerTitle: true,
         bottom: TabBar(
           controller: controller.tabController,
-          tabs: const [
-            Tab(text: '日运'),
-            Tab(text: '月运'),
+          tabs: [
+            Tab(text: context.tr(LocaleKeys.daily_yunshi)),
+            Tab(text: context.tr(LocaleKeys.monthly_yunshi)),
           ],
         ),
       ),

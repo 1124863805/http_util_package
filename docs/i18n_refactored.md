@@ -33,35 +33,7 @@ final deviceLocale = localeService.deviceLocale;
 await localeService.deleteSaveLocale();
 ```
 
-### 2. LocaleHelper 优化
-
-#### 改进前
-- 只提供基本的翻译方法
-- 缺少复数支持
-- 缺少参数格式化
-
-#### 改进后
-- 推荐使用 `context.tr()` 方法（避免与 GetX 冲突）
-- 支持复数翻译（`plural()`）
-- 支持参数格式化（`NumberFormat`）
-- 支持性别切换（`gender`）
-
-```dart
-// 基本翻译
-LocaleHelper.tr(context, LocaleKeys.settings)
-
-// 带参数翻译
-LocaleHelper.trWithArgs(context, 'welcome', {'name': 'John'})
-
-// 复数翻译
-LocaleHelper.plural(context, 'item', 5)
-
-// 复数翻译（带格式化）
-LocaleHelper.plural(context, 'money', 1000000, 
-  format: NumberFormat.compact(locale: context.locale.toString()))
-```
-
-### 3. main.dart 配置优化
+### 2. main.dart 配置优化
 
 #### 新增配置项
 - `saveLocale: true` - 自动保存语言设置
@@ -92,9 +64,6 @@ import '../../../generated/locale_keys.g.dart';
 
 // 推荐方式：使用 context.tr()
 Text(context.tr(LocaleKeys.settings))
-
-// 或者使用 LocaleHelper
-Text(LocaleHelper.tr(context, LocaleKeys.settings))
 ```
 
 ### 2. 带参数翻译

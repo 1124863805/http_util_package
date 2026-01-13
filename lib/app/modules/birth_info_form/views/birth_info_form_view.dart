@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:easy_localization/easy_localization.dart';
+import '../../../../generated/locale_keys.g.dart';
 
 import '../controllers/birth_info_form_controller.dart';
 
@@ -10,7 +12,9 @@ class BirthInfoFormView extends GetView<BirthInfoFormController> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(controller.isEditMode ? '修改生辰' : '添加生辰'),
+        title: Text(controller.isEditMode
+            ? context.tr(LocaleKeys.edit_birth_info)
+            : context.tr(LocaleKeys.add_birth_info)),
         centerTitle: true,
       ),
       body: SingleChildScrollView(
@@ -22,11 +26,11 @@ class BirthInfoFormView extends GetView<BirthInfoFormController> {
               // 名称
               TextField(
                 controller: controller.nameController,
-                decoration: const InputDecoration(
-                  labelText: '名称',
-                  hintText: '请输入名称',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.person),
+                decoration: InputDecoration(
+                  labelText: context.tr(LocaleKeys.name),
+                  hintText: context.tr(LocaleKeys.please_input_name),
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.person),
                 ),
               ),
               const SizedBox(height: 16),
@@ -38,10 +42,10 @@ class BirthInfoFormView extends GetView<BirthInfoFormController> {
                     : controller.selectedGender.value;
                 return DropdownButtonFormField<String>(
                   initialValue: currentGender,
-                  decoration: const InputDecoration(
-                    labelText: '性别',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.people),
+                  decoration: InputDecoration(
+                    labelText: context.tr(LocaleKeys.gender),
+                    border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.people),
                   ),
                   items: controller.genderOptions
                       .map((gender) => DropdownMenuItem(
@@ -62,11 +66,11 @@ class BirthInfoFormView extends GetView<BirthInfoFormController> {
               TextField(
                 controller: controller.birthDateController,
                 readOnly: true,
-                decoration: const InputDecoration(
-                  labelText: '生日',
-                  hintText: '请选择生日',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.calendar_today),
+                decoration: InputDecoration(
+                  labelText: context.tr(LocaleKeys.birthday),
+                  hintText: context.tr(LocaleKeys.please_select_birthday),
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.calendar_today),
                 ),
                 onTap: () => controller.selectBirthDate(context),
               ),
@@ -75,11 +79,11 @@ class BirthInfoFormView extends GetView<BirthInfoFormController> {
               // 出生地
               TextField(
                 controller: controller.birthPlaceController,
-                decoration: const InputDecoration(
-                  labelText: '出生地',
-                  hintText: '请输入出生地',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.location_on),
+                decoration: InputDecoration(
+                  labelText: context.tr(LocaleKeys.birth_place),
+                  hintText: context.tr(LocaleKeys.please_input_birth_place),
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.location_on),
                 ),
               ),
               const SizedBox(height: 32),
@@ -97,7 +101,9 @@ class BirthInfoFormView extends GetView<BirthInfoFormController> {
                     ),
                   ),
                   child: Text(
-                    controller.isEditMode ? '保存修改' : '添加',
+                    controller.isEditMode
+                        ? context.tr(LocaleKeys.save_changes)
+                        : context.tr(LocaleKeys.add),
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,

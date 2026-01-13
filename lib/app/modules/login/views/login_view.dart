@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:easy_localization/easy_localization.dart';
+import '../../../../generated/locale_keys.g.dart';
 
 import '../controllers/login_controller.dart';
 
@@ -9,7 +11,10 @@ class LoginView extends GetView<LoginController> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('登录'), centerTitle: true),
+      appBar: AppBar(
+        title: Text(context.tr(LocaleKeys.login)),
+        centerTitle: true,
+      ),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -19,10 +24,10 @@ class LoginView extends GetView<LoginController> {
             const SizedBox(height: 32),
             TextField(
               controller: controller.usernameController,
-              decoration: const InputDecoration(
-                labelText: '用户名',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.person),
+              decoration: InputDecoration(
+                labelText: context.tr(LocaleKeys.username),
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.person),
               ),
             ),
             const SizedBox(height: 16),
@@ -31,7 +36,7 @@ class LoginView extends GetView<LoginController> {
                 controller: controller.passwordController,
                 obscureText: controller.isPasswordHidden.value,
                 decoration: InputDecoration(
-                  labelText: '密码',
+                  labelText: context.tr(LocaleKeys.password),
                   border: const OutlineInputBorder(),
                   prefixIcon: const Icon(Icons.lock),
                   suffixIcon: IconButton(
@@ -55,9 +60,9 @@ class LoginView extends GetView<LoginController> {
                   backgroundColor: Colors.blue,
                   foregroundColor: Colors.white,
                 ),
-                child: const Text(
-                  '登录',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                child: Text(
+                  context.tr(LocaleKeys.login),
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ),
             ),

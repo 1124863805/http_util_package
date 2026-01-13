@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-
 import 'package:get/get.dart';
+import 'package:easy_localization/easy_localization.dart';
+import '../../../../generated/locale_keys.g.dart';
 
 import '../controllers/my_orders_controller.dart';
 
@@ -10,13 +11,13 @@ class MyOrdersView extends GetView<MyOrdersController> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('我的订单'),
+        title: Text(context.tr(LocaleKeys.my_orders)),
         centerTitle: true,
       ),
-      body: const Center(
+      body: Center(
         child: Text(
-          '我的订单',
-          style: TextStyle(fontSize: 20),
+          context.tr(LocaleKeys.my_orders),
+          style: const TextStyle(fontSize: 20),
         ),
       ),
     );

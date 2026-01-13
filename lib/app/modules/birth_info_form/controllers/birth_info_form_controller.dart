@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:easy_localization/easy_localization.dart';
+import '../../../../generated/locale_keys.g.dart';
+import '../../../../app/services/locale_service.dart';
 
 class BirthInfoFormController extends GetxController {
   // 表单字段
@@ -8,8 +11,12 @@ class BirthInfoFormController extends GetxController {
   final birthDateController = TextEditingController();
   final birthPlaceController = TextEditingController();
 
-  // 性别选项
-  final List<String> genderOptions = ['男', '女', '其他'];
+  // 性别选项（使用 LocaleKeys）
+  List<String> get genderOptions => [
+        Get.context!.tr('male'),
+        Get.context!.tr('female'),
+        Get.context!.tr('other'),
+      ];
   final selectedGender = ''.obs;
   DateTime? selectedBirthDate;
 
@@ -44,12 +51,13 @@ class BirthInfoFormController extends GetxController {
 
   /// 选择生日
   Future<void> selectBirthDate(BuildContext context) async {
+    final localeService = Get.find<LocaleService>();
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: selectedBirthDate ?? DateTime.now(),
       firstDate: DateTime(1900),
       lastDate: DateTime.now(),
-      locale: const Locale('zh', 'CN'),
+      locale: localeService.currentLocale,
     );
     if (picked != null) {
       selectedBirthDate = picked;
@@ -60,20 +68,37 @@ class BirthInfoFormController extends GetxController {
 
   /// 提交表单
   void submitForm() {
+    final context = Get.context!;
     if (nameController.text.trim().isEmpty) {
-      Get.snackbar('提示', '请输入名称', snackPosition: SnackPosition.BOTTOM);
+      Get.snackbar(
+        context.tr(LocaleKeys.tip),
+        context.tr(LocaleKeys.please_input_name),
+        snackPosition: SnackPosition.BOTTOM,
+      );
       return;
     }
     if (selectedGender.value.isEmpty) {
-      Get.snackbar('提示', '请选择性别', snackPosition: SnackPosition.BOTTOM);
+      Get.snackbar(
+        context.tr(LocaleKeys.tip),
+        context.tr(LocaleKeys.please_select_gender),
+        snackPosition: SnackPosition.BOTTOM,
+      );
       return;
     }
     if (selectedBirthDate == null) {
-      Get.snackbar('提示', '请选择生日', snackPosition: SnackPosition.BOTTOM);
+      Get.snackbar(
+        context.tr(LocaleKeys.tip),
+        context.tr(LocaleKeys.please_select_birthday),
+        snackPosition: SnackPosition.BOTTOM,
+      );
       return;
     }
     if (birthPlaceController.text.trim().isEmpty) {
-      Get.snackbar('提示', '请输入出生地', snackPosition: SnackPosition.BOTTOM);
+      Get.snackbar(
+        context.tr(LocaleKeys.tip),
+        context.tr(LocaleKeys.please_input_birth_place),
+        snackPosition: SnackPosition.BOTTOM,
+      );
       return;
     }
 
@@ -86,8 +111,10 @@ class BirthInfoFormController extends GetxController {
     };
 
     Get.snackbar(
-      '成功',
-      isEditMode ? '修改成功' : '添加成功',
+      context.tr(LocaleKeys.success),
+      isEditMode
+          ? context.tr(LocaleKeys.edit_success)
+          : context.tr(LocaleKeys.add_success),
       snackPosition: SnackPosition.BOTTOM,
     );
 

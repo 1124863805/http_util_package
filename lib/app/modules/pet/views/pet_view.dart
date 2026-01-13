@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-
 import 'package:get/get.dart';
+import 'package:easy_localization/easy_localization.dart';
+import '../../../../generated/locale_keys.g.dart';
 
 import '../controllers/pet_controller.dart';
 
@@ -10,13 +11,13 @@ class PetView extends GetView<PetController> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('灵宠'),
+        title: Text(context.tr(LocaleKeys.pet)),
         centerTitle: true,
       ),
-      body: const Center(
+      body: Center(
         child: Text(
-          '灵宠',
-          style: TextStyle(fontSize: 20),
+          context.tr(LocaleKeys.pet),
+          style: const TextStyle(fontSize: 20),
         ),
       ),
     );

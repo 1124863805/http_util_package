@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:easy_localization/easy_localization.dart';
+import '../../../../generated/locale_keys.g.dart';
 
 import '../controllers/main_controller.dart';
 import '../../home/views/home_view.dart';
@@ -20,33 +22,35 @@ class MainView extends GetView<MainController> {
     ];
 
     return Scaffold(
-      body: Obx(() => IndexedStack(
-            index: controller.currentIndex.value,
-            children: pages,
-          )),
-      bottomNavigationBar: Obx(() => BottomNavigationBar(
-            currentIndex: controller.currentIndex.value,
-            onTap: controller.changeTab,
-            type: BottomNavigationBarType.fixed,
-            items: const [
-              BottomNavigationBarItem(
-                icon: Icon(Icons.home),
-                label: '首页',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.pets),
-                label: '灵宠',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.chat_bubble_outline),
-                label: '倾诉',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.person),
-                label: '我的',
-              ),
-            ],
-          )),
+      body: Obx(
+        () =>
+            IndexedStack(index: controller.currentIndex.value, children: pages),
+      ),
+      bottomNavigationBar: Obx(
+        () => BottomNavigationBar(
+          currentIndex: controller.currentIndex.value,
+          onTap: controller.changeTab,
+          type: BottomNavigationBarType.fixed,
+          items: [
+            BottomNavigationBarItem(
+              icon: const Icon(Icons.home),
+              label: context.tr(LocaleKeys.home),
+            ),
+            BottomNavigationBarItem(
+              icon: const Icon(Icons.pets),
+              label: context.tr(LocaleKeys.pet),
+            ),
+            BottomNavigationBarItem(
+              icon: const Icon(Icons.chat_bubble_outline),
+              label: context.tr(LocaleKeys.chat),
+            ),
+            BottomNavigationBarItem(
+              icon: const Icon(Icons.person),
+              label: context.tr(LocaleKeys.mine),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

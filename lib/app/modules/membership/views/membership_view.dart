@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-
 import 'package:get/get.dart';
+import 'package:easy_localization/easy_localization.dart';
+import '../../../../generated/locale_keys.g.dart';
 
 import '../controllers/membership_controller.dart';
 
@@ -10,13 +11,13 @@ class MembershipView extends GetView<MembershipController> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('会员'),
+        title: Text(context.tr(LocaleKeys.membership)),
         centerTitle: true,
       ),
-      body: const Center(
+      body: Center(
         child: Text(
-          '会员',
-          style: TextStyle(fontSize: 20),
+          context.tr(LocaleKeys.membership),
+          style: const TextStyle(fontSize: 20),
         ),
       ),
     );

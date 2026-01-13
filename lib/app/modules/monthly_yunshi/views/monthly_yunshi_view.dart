@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:easy_localization/easy_localization.dart';
+import '../../../../generated/locale_keys.g.dart';
 
 import '../controllers/monthly_yunshi_controller.dart';
 
@@ -8,18 +10,21 @@ class MonthlyYunshiView extends GetView<MonthlyYunshiController> {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.calendar_month, size: 80, color: Colors.blue),
-          SizedBox(height: 24),
+          const Icon(Icons.calendar_month, size: 80, color: Colors.blue),
+          const SizedBox(height: 24),
           Text(
-            '月运',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            context.tr(LocaleKeys.monthly_yunshi),
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
-          SizedBox(height: 16),
-          Text('本月运势内容', style: TextStyle(fontSize: 16, color: Colors.grey)),
+          const SizedBox(height: 16),
+          Text(
+            context.tr(LocaleKeys.month_yunshi),
+            style: const TextStyle(fontSize: 16, color: Colors.grey),
+          ),
         ],
       ),
     );

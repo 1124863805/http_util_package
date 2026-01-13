@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:easy_localization/easy_localization.dart';
+import '../../../../generated/locale_keys.g.dart';
 
 import '../controllers/home_controller.dart';
 
@@ -10,7 +12,7 @@ class HomeView extends GetView<HomeController> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('首页'),
+        title: Text(context.tr(LocaleKeys.home)),
         centerTitle: true,
       ),
       body: SingleChildScrollView(
@@ -18,12 +20,9 @@ class HomeView extends GetView<HomeController> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              '功能入口',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+            Text(
+              context.tr(LocaleKeys.function_entrance),
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             // 运势入口卡片
@@ -53,21 +52,21 @@ class HomeView extends GetView<HomeController> {
                         ),
                       ),
                       const SizedBox(width: 16),
-                      const Expanded(
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '运势',
-                              style: TextStyle(
+                              context.tr(LocaleKeys.yunshi),
+                              style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            SizedBox(height: 4),
+                            const SizedBox(height: 4),
                             Text(
-                              '查看日运和月运',
-                              style: TextStyle(
+                              context.tr(LocaleKeys.view_daily_monthly_yunshi),
+                              style: const TextStyle(
                                 fontSize: 14,
                                 color: Colors.grey,
                               ),
@@ -75,10 +74,7 @@ class HomeView extends GetView<HomeController> {
                           ],
                         ),
                       ),
-                      const Icon(
-                        Icons.chevron_right,
-                        color: Colors.grey,
-                      ),
+                      const Icon(Icons.chevron_right, color: Colors.grey),
                     ],
                   ),
                 ),
@@ -112,21 +108,21 @@ class HomeView extends GetView<HomeController> {
                         ),
                       ),
                       const SizedBox(width: 16),
-                      const Expanded(
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '生辰信息',
-                              style: TextStyle(
+                              context.tr(LocaleKeys.birth_info),
+                              style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            SizedBox(height: 4),
+                            const SizedBox(height: 4),
                             Text(
-                              '添加或修改生辰信息',
-                              style: TextStyle(
+                              context.tr(LocaleKeys.add_or_edit_birth_info),
+                              style: const TextStyle(
                                 fontSize: 14,
                                 color: Colors.grey,
                               ),
@@ -134,10 +130,7 @@ class HomeView extends GetView<HomeController> {
                           ],
                         ),
                       ),
-                      const Icon(
-                        Icons.chevron_right,
-                        color: Colors.grey,
-                      ),
+                      const Icon(Icons.chevron_right, color: Colors.grey),
                     ],
                   ),
                 ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-
 import 'package:get/get.dart';
+import 'package:easy_localization/easy_localization.dart';
+import '../../../../generated/locale_keys.g.dart';
 
 import '../controllers/feedback_controller.dart';
 
@@ -10,13 +11,13 @@ class FeedbackView extends GetView<FeedbackController> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('问题反馈'),
+        title: Text(context.tr(LocaleKeys.feedback)),
         centerTitle: true,
       ),
-      body: const Center(
+      body: Center(
         child: Text(
-          '问题反馈',
-          style: TextStyle(fontSize: 20),
+          context.tr(LocaleKeys.feedback),
+          style: const TextStyle(fontSize: 20),
         ),
       ),
     );

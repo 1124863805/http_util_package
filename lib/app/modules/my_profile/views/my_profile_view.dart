@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-
 import 'package:get/get.dart';
+import 'package:easy_localization/easy_localization.dart';
+import '../../../../generated/locale_keys.g.dart';
 
 import '../controllers/my_profile_controller.dart';
 
@@ -10,13 +11,13 @@ class MyProfileView extends GetView<MyProfileController> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('我的档案'),
+        title: Text(context.tr(LocaleKeys.my_profile)),
         centerTitle: true,
       ),
-      body: const Center(
+      body: Center(
         child: Text(
-          '我的档案',
-          style: TextStyle(fontSize: 20),
+          context.tr(LocaleKeys.my_profile),
+          style: const TextStyle(fontSize: 20),
         ),
       ),
     );

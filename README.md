@@ -112,11 +112,8 @@ lib/
    import 'package:easy_localization/easy_localization.dart';
    import '../../../generated/locale_keys.g.dart';
    
-   // 方式一：使用 context.tr()（推荐）
+   // 使用 context.tr()（推荐）
    Text(context.tr(LocaleKeys.new_key))
-   
-   // 方式二：使用 LocaleHelper
-   Text(LocaleHelper.tr(context, LocaleKeys.new_key))
    ```
 
 ### 🌐 如何添加新语言
