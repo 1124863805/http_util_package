@@ -7,6 +7,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'app/routes/app_pages.dart';
 import 'app/theme/app_theme.dart';
 import 'app/services/locale_service.dart';
+import 'app/utils/privacy_util.dart';
 import 'generated/codegen_loader.g.dart';
 
 void main() async {
@@ -22,8 +23,7 @@ void main() async {
   Get.put(LocaleService(), permanent: true);
 
   // 检查隐私协议状态，决定初始路由
-  final storage = GetStorage();
-  final hasAgreed = storage.read<bool>('privacy_agreed') ?? false;
+  final hasAgreed = PrivacyUtil.isPrivacyAgreed();
   final initialRoute = hasAgreed ? Routes.MAIN : Routes.PRIVACY;
 
   runApp(

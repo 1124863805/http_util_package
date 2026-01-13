@@ -1,14 +1,14 @@
 import 'package:get/get.dart';
-import 'package:get_storage/get_storage.dart';
 import '../../../routes/app_pages.dart';
+import '../../../utils/privacy_util.dart';
+import '../../../utils/user_agent_util.dart';
 
 class PrivacyController extends GetxController {
-  final _storage = GetStorage();
-  final _privacyAgreedKey = 'privacy_agreed';
-
   /// 用户同意隐私协议
-  void agreePrivacy() {
-    _storage.write(_privacyAgreedKey, true);
+  Future<void> agreePrivacy() async {
+    await PrivacyUtil.setPrivacyAgreed(true);
+    // 清除 User-Agent 缓存，以便重新构建
+    UserAgentUtil.clearCache();
     Get.offAllNamed(Routes.MAIN);
   }
 }
