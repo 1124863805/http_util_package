@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2026-01-13
+
+### 改进
+- 完善文档，添加智能解析器示例（处理不规范的响应结构和分页结构）
+- 补充所有示例代码的导入语句
+- 完善 API 文档，添加缺失的参数说明（`networkErrorKey`, `logShowRequestHint`）
+- 补充 `Response<T>` 接口文档，添加 `handleError()` 方法说明
+- 完善 `PagedResponse` 类示例代码
+
 ## [1.0.1] - 2026-01-13
 
 ### 🚀 初始版本：基于接口的完全灵活设计
