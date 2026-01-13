@@ -10,17 +10,17 @@ class ApiResponse<T> {
   final bool isSuccess;
 
   /// 错误消息显示回调（由 HttpConfig 注入）
-  static void Function(String title, String message)? _onError;
+  static void Function(String message)? _onError;
 
   /// 设置错误消息显示回调
   static void setErrorHandler(
-    void Function(String title, String message)? handler,
+    void Function(String message)? handler,
   ) {
     _onError = handler;
   }
 
   ApiResponse({required this.code, required this.message, this.data})
-    : isSuccess = code == 0;
+      : isSuccess = code == 0;
 
   /// 从 Dio Response 创建 ApiResponse
   factory ApiResponse.fromResponse(dio_package.Response response) {
@@ -40,7 +40,7 @@ class ApiResponse<T> {
   /// 返回是否成功，方便链式调用
   bool handleError() {
     if (!isSuccess && _onError != null) {
-      _onError!('提示', message);
+      _onError!(message);
     }
     return isSuccess;
   }

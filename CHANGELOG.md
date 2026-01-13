@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-01-13
+
+### Removed
+- Removed `tipTitleKey` parameter from `HttpConfig` (not needed)
+- Removed `title` parameter from `onError` callback (simplified to only `message`)
+
+### Changed
+- Simplified `ApiResponse.setErrorHandler` method signature
+- Simplified `onError` callback signature: `void Function(String message)?` (removed `title` parameter)
+- Updated error handling to only pass `message` to `onError` callback
+
 ## [1.0.0] - 2024-01-XX
 
 ### Added

@@ -197,10 +197,9 @@ extension HttpUtilSafeCall on HttpUtil {
     }
 
     final errorMessage = config.networkErrorKey ?? '网络错误，请稍后重试！';
-    final title = config.tipTitleKey ?? '提示';
 
     if (config.onError != null) {
-      config.onError!(title, errorMessage);
+      config.onError!(errorMessage);
     }
 
     return ApiResponse<T>(code: -1, message: errorMessage, data: null);

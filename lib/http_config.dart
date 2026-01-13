@@ -30,13 +30,10 @@ class HttpConfig {
   /// 如果为 null，则使用默认消息
   final String? networkErrorKey;
 
-  /// 提示标题的键（用于国际化）
-  /// 如果为 null，则使用默认标题
-  final String? tipTitleKey;
-
   /// 错误消息显示回调
   /// 如果为 null，则不显示错误提示
-  final void Function(String title, String message)? onError;
+  /// [message] 可能是国际化键，需要在回调中自行翻译
+  final void Function(String message)? onError;
 
   /// 是否启用日志打印（默认 false）
   /// 启用后会自动打印请求和响应信息
@@ -62,7 +59,6 @@ class HttpConfig {
     this.staticHeaders,
     this.dynamicHeaderBuilder,
     this.networkErrorKey,
-    this.tipTitleKey,
     this.onError,
     this.enableLogging = false,
     this.logPrintBody = true,

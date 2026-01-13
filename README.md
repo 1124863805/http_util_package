@@ -17,17 +17,7 @@
 
 ```yaml
 dependencies:
-  dio_http_util:
-    git:
-      url: https://github.com/1124863805/http_util_package.git
-      ref: main
-```
-
-或者发布到 pub.dev 后：
-
-```yaml
-dependencies:
-  dio_http_util: ^1.0.0
+  dio_http_util: ^1.0.1
 ```
 
 然后运行：
@@ -65,13 +55,17 @@ void main() {
         
         return headers;
       },
-      onError: (title, message) {
+      networkErrorKey: 'network_error_retry', // 网络错误消息的国际化键（可选）
+      onError: (message) {
         // 自定义错误提示
-        print('$title: $message');
+        // message 可能是国际化键，需要在回调中自行翻译
+        print('错误: $message');
       },
       // 启用日志打印（可选）
-      enableLogging: true,  // 是否启用日志
-      logPrintBody: true,   // 是否打印请求/响应 body
+      enableLogging: true,        // 是否启用日志
+      logPrintBody: true,         // 是否打印请求/响应 body
+      logMode: LogMode.complete,  // 日志模式（默认 complete，推荐）
+      logShowRequestHint: true,  // 请求时显示简要提示（仅在 complete 模式下有效）
     ),
   );
 }
@@ -126,7 +120,6 @@ HttpUtil.configure(
     baseUrl: 'https://api.example.com',
     enableLogging: true,        // 启用日志
     logPrintBody: true,         // 打印 body（设为 false 则不打印 body，更简洁）
-    logEnableColor: true,       // 启用颜色（默认 true）
     logMode: LogMode.complete,  // 日志模式（默认 complete，推荐）
     logShowRequestHint: true,   // 请求时显示简要提示（仅在 complete 模式下有效）
   ),
@@ -216,9 +209,8 @@ final dio = HttpUtil.dio;
 // 手动添加日志拦截器
 dio.interceptors.add(LogInterceptor(
   printBody: true,           // 是否打印 body
-  enableColor: true,         // 是否启用颜色（默认 true）
-  logMode: LogMode.complete, // 日志模式（默认 complete）
-  showRequestHint: true,     // 请求时显示简要提示（默认 true）
+  logMode: LogMode.complete,  // 日志模式（默认 complete）
+  showRequestHint: true,      // 请求时显示简要提示（默认 true）
 ));
 ```
 
@@ -270,12 +262,10 @@ final anotherDio = HttpUtil.createDio(
 | `baseUrl` | `String` | 基础 URL（必需） |
 | `staticHeaders` | `Map<String, String>?` | 静态请求头 |
 | `dynamicHeaderBuilder` | `Future<Map<String, String>> Function()?` | 动态请求头构建器 |
-| `networkErrorKey` | `String?` | 网络错误消息键（用于国际化） |
-| `tipTitleKey` | `String?` | 提示标题键（用于国际化） |
-| `onError` | `void Function(String, String)?` | 错误提示回调 |
+| `networkErrorKey` | `String?` | 网络错误消息键（用于国际化，可选） |
+| `onError` | `void Function(String message)?` | 错误提示回调（message 可能是国际化键，需要在回调中自行翻译） |
 | `enableLogging` | `bool` | 是否启用日志打印（默认 false） |
 | `logPrintBody` | `bool` | 是否打印请求/响应 body（默认 true） |
-| `logEnableColor` | `bool` | 是否启用日志颜色（默认 true） |
 | `logMode` | `LogMode` | 日志打印模式（默认 `LogMode.complete`） |
 | `logShowRequestHint` | `bool` | 是否在请求时显示简要提示（仅在 complete 模式下有效，默认 true） |
 
@@ -358,18 +348,6 @@ lib/http_util/
 └── README.md            # 文档
 ```
 
-## 发布到 pub.dev
-
-1. 创建独立的 package 目录
-2. 添加 `pubspec.yaml`
-3. 配置依赖和导出
-4. 运行 `dart pub publish --dry-run` 检查
-5. 运行 `dart pub publish` 发布
-
 ## License
 
 MIT License - see [LICENSE](LICENSE) file for details.
-
-## 发布到 pub.dev
-
-详细发布指南请参考 [PUBLISH_GUIDE.md](PUBLISH_GUIDE.md)。
