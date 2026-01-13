@@ -1,4 +1,4 @@
-name: http_util
+name: dio_http_util
 description: A powerful HTTP utility package based on Dio with configurable header injection and unified error handling.
 version: 1.0.0
 homepage: https://github.com/1124863805/http_util_package

@@ -1,4 +1,4 @@
-# HTTP Util
+# Dio HTTP Util
 
 一个基于 Dio 封装的 HTTP 请求工具类，支持配置化的请求头注入和统一的错误处理。
 
@@ -17,9 +17,9 @@
 
 ```yaml
 dependencies:
-  http_util:
+  dio_http_util:
     git:
-      url: https://github.com/yourusername/http_util.git
+      url: https://github.com/1124863805/http_util_package.git
       ref: main
 ```
 
@@ -27,7 +27,7 @@ dependencies:
 
 ```yaml
 dependencies:
-  http_util: ^1.0.0
+  dio_http_util: ^1.0.0
 ```
 
 然后运行：
@@ -41,7 +41,7 @@ flutter pub get
 ### 1. 配置 HTTP 工具类
 
 ```dart
-import 'package:http_util/http_util.dart';
+import 'package:dio_http_util/http_util.dart';
 
 void main() {
   HttpUtil.configure(
@@ -77,7 +77,7 @@ void main() {
 ### 2. 发送请求
 
 ```dart
-import 'package:http_util/http_util.dart';
+import 'package:dio_http_util/http_util.dart';
 
 // 使用 send 方法（自动处理错误）
 final response = await http.send(
