@@ -45,12 +45,13 @@ class HttpAdapter {
           return headers;
         },
         networkErrorKey: LocaleKeys.network_error_retry,
-        tipTitleKey: LocaleKeys.tip,
-        onError: (title, message) {
+        onError: (message) {
           final context = Get.context;
           if (context != null) {
+            // message 可能是国际化键，需要翻译
+            // 如果传入的是键，则翻译；如果是文本，则直接使用
             final titleText = context.tr(LocaleKeys.tip);
-            final messageText = message;
+            final messageText = context.tr(message);
             Get.snackbar(
               titleText,
               messageText,
