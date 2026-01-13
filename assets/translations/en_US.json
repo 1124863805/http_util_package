@@ -61,5 +61,15 @@
   "save_changes": "Save Changes",
   "edit_success": "Edit Success",
   "add_success": "Add Success",
-  "privacy_content": "Welcome to Heshi App!\n\nWe take your privacy protection very seriously. Before using this app, please read and agree to the following privacy policy:\n\n1. Information Collection\nWe only collect information necessary to provide services, including but not limited to device information, usage logs, etc.\n\n2. Information Use\nWe use the collected information to improve service quality, provide personalized experiences, and ensure secure app operation.\n\n3. Information Protection\nWe adopt industry-standard security measures to protect your personal information from unauthorized access, use, or disclosure.\n\n4. Information Sharing\nWe will not sell, trade, or transfer your personal information to third parties unless we have your explicit consent or are required by law.\n\n5. User Rights\nYou have the right to access, correct, delete your personal information, or withdraw consent.\n\n6. Policy Updates\nWe may update this privacy policy from time to time, and the updated policy will be published in the app.\n\nContinued use of this app indicates your agreement to this privacy policy."
+  "privacy_content": "Welcome to Heshi App!\n\nWe take your privacy protection very seriously. Before using this app, please read and agree to the following privacy policy:\n\n1. Information Collection\nWe only collect information necessary to provide services, including but not limited to device information, usage logs, etc.\n\n2. Information Use\nWe use the collected information to improve service quality, provide personalized experiences, and ensure secure app operation.\n\n3. Information Protection\nWe adopt industry-standard security measures to protect your personal information from unauthorized access, use, or disclosure.\n\n4. Information Sharing\nWe will not sell, trade, or transfer your personal information to third parties unless we have your explicit consent or are required by law.\n\n5. User Rights\nYou have the right to access, correct, delete your personal information, or withdraw consent.\n\n6. Policy Updates\nWe may update this privacy policy from time to time, and the updated policy will be published in the app.\n\nContinued use of this app indicates your agreement to this privacy policy.",
+  "email": "Email",
+  "verification_code": "Verification Code",
+  "send_code": "Send Code",
+  "please_input_email": "Please input email",
+  "please_input_code": "Please input code",
+  "code_sent": "Code sent",
+  "code_sent_failed": "Failed to send code",
+  "login_success": "Login success",
+  "login_failed": "Login failed",
+  "network_error_retry": "Network error, please try again later!"
 }

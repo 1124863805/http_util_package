@@ -20,35 +20,55 @@ class LoginView extends GetView<LoginController> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.account_circle, size: 80, color: Colors.blue),
+            const Icon(Icons.email, size: 80, color: Colors.blue),
             const SizedBox(height: 32),
             TextField(
-              controller: controller.usernameController,
+              controller: controller.emailController,
+              keyboardType: TextInputType.emailAddress,
               decoration: InputDecoration(
-                labelText: context.tr(LocaleKeys.username),
+                labelText: context.tr(LocaleKeys.email),
+                hintText: context.tr(LocaleKeys.please_input_email),
                 border: const OutlineInputBorder(),
-                prefixIcon: const Icon(Icons.person),
+                prefixIcon: const Icon(Icons.email),
               ),
             ),
             const SizedBox(height: 16),
-            Obx(
-              () => TextField(
-                controller: controller.passwordController,
-                obscureText: controller.isPasswordHidden.value,
-                decoration: InputDecoration(
-                  labelText: context.tr(LocaleKeys.password),
-                  border: const OutlineInputBorder(),
-                  prefixIcon: const Icon(Icons.lock),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      controller.isPasswordHidden.value
-                          ? Icons.visibility
-                          : Icons.visibility_off,
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: controller.codeController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: context.tr(LocaleKeys.verification_code),
+                      hintText: context.tr(LocaleKeys.please_input_code),
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.lock_outline),
                     ),
-                    onPressed: controller.togglePasswordVisibility,
                   ),
                 ),
-              ),
+                const SizedBox(width: 8),
+                Obx(
+                  () => SizedBox(
+                    width: 120,
+                    child: ElevatedButton(
+                      onPressed: controller.countdown.value > 0
+                          ? null
+                          : controller.sendVerificationCode,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: Text(
+                        controller.countdown.value > 0
+                            ? '${controller.countdown.value}s'
+                            : context.tr(LocaleKeys.send_code),
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 24),
             SizedBox(
