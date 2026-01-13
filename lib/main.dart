@@ -8,6 +8,7 @@ import 'app/routes/app_pages.dart';
 import 'app/theme/app_theme.dart';
 import 'app/services/locale_service.dart';
 import 'app/utils/privacy_util.dart';
+import 'app/utils/http_adapter.dart';
 import 'generated/codegen_loader.g.dart';
 
 void main() async {
@@ -21,6 +22,9 @@ void main() async {
 
   // 初始化 LocaleService
   Get.put(LocaleService(), permanent: true);
+
+  // 初始化 HTTP 工具类配置
+  HttpAdapter.init();
 
   // 检查隐私协议状态，决定初始路由
   final hasAgreed = PrivacyUtil.isPrivacyAgreed();

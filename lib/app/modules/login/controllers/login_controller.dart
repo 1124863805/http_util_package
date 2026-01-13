@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'dart:async';
 import '../../../routes/app_pages.dart';
-import '../../../../app/utils/http_util.dart';
+import 'package:dio_http_util/http_util.dart';
 import '../../../../app/utils/auth_util.dart';
 import '../../../../app/utils/form_validator.dart';
 
