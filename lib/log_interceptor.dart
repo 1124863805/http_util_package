@@ -42,6 +42,18 @@ class LogInterceptor extends dio_package.Interceptor {
     }
   }
 
+  /// 按行输出 StringBuffer 的内容，避免单行过长被截断
+  /// 在同步块内逐行输出，确保日志块的原子性
+  void _printBuffer(StringBuffer buffer) {
+    final content = buffer.toString();
+    final lines = content.split('\n');
+    for (final line in lines) {
+      if (line.isNotEmpty) {
+        print(line);
+      }
+    }
+  }
+
   /// 生成请求唯一ID
   String _generateRequestId(dio_package.RequestOptions options) {
     final timestamp = DateTime.now().microsecondsSinceEpoch;
@@ -58,14 +70,15 @@ class LogInterceptor extends dio_package.Interceptor {
     }
   }
 
-  /// 打印 Headers（统一处理，确保所有 headers 都被打印）
+  /// 将 Headers 追加到 StringBuffer（统一处理，确保所有 headers 都被打印）
   /// [indent] 缩进字符串，如 "│   " 或 "│      "
   /// 注意：此方法内部调用，不进行同步（由调用者负责同步）
-  void _logHeadersUnsafe(Map<String, dynamic> headers,
+  void _appendHeadersToStringBuffer(
+      StringBuffer buffer, Map<String, dynamic> headers,
       {String indent = '│      '}) {
     if (headers.isEmpty) return;
 
-    print('[HttpUtil] ${indent}Headers:');
+    buffer.writeln('[HttpUtil] ${indent}Headers:');
     // 按字母顺序排序 headers，确保输出一致
     // 注意：创建新的 Map 来避免修改原始 headers
     final headersCopy = Map<String, dynamic>.from(headers);
@@ -81,7 +94,7 @@ class LogInterceptor extends dio_package.Interceptor {
         displayValue =
             'Bearer ${token.length > 20 ? '${token.substring(0, 20)}...' : token}';
       }
-      print('[HttpUtil] $indent$key: $displayValue');
+      buffer.writeln('[HttpUtil] $indent$key: $displayValue');
     });
   }
 
@@ -172,22 +185,28 @@ class LogInterceptor extends dio_package.Interceptor {
   /// 打印请求日志（实时模式使用）
   void _logRequest(dio_package.RequestOptions options) {
     _synchronizedLog(() async {
-      print(
+      // 使用 StringBuffer 收集所有日志内容，然后一次性输出
+      final buffer = StringBuffer();
+
+      buffer.writeln(
           '[HttpUtil] ┌─────────────────────────────────────────────────────────────');
-      print('[HttpUtil] │ Request: ${options.method} ${options.uri}');
-      _logHeadersUnsafe(options.headers, indent: '│   ');
+      buffer.writeln('[HttpUtil] │ Request: ${options.method} ${options.uri}');
+      _appendHeadersToStringBuffer(buffer, options.headers, indent: '│   ');
       if (printBody && options.data != null) {
-        print('[HttpUtil] │ Body:');
-        print('[HttpUtil] │   ${options.data}');
+        buffer.writeln('[HttpUtil] │ Body:');
+        buffer.writeln('[HttpUtil] │   ${options.data}');
       }
       if (options.queryParameters.isNotEmpty) {
-        print('[HttpUtil] │ Query Parameters:');
+        buffer.writeln('[HttpUtil] │ Query Parameters:');
         options.queryParameters.forEach((key, value) {
-          print('[HttpUtil] │   $key: $value');
+          buffer.writeln('[HttpUtil] │   $key: $value');
         });
       }
-      print(
+      buffer.writeln(
           '[HttpUtil] └─────────────────────────────────────────────────────────────');
+
+      // 按行输出所有日志内容，避免单行过长被截断
+      _printBuffer(buffer);
     });
   }
 
@@ -221,55 +240,67 @@ class LogInterceptor extends dio_package.Interceptor {
       // response.requestOptions.headers 应该包含所有 headers
       final headers = Map<String, dynamic>.from(options.headers);
 
-      print(
+      // 使用 StringBuffer 收集所有日志内容，然后一次性输出
+      final buffer = StringBuffer();
+
+      buffer.writeln(
           '[HttpUtil] ┌─────────────────────────────────────────────────────────────');
-      print(
+      buffer.writeln(
           '[HttpUtil] │ [请求链路 #$requestId] ${options.method} ${options.uri} (耗时: ${_formatDuration(duration)}) $statusIcon');
-      print(
+      buffer.writeln(
           '[HttpUtil] │ ───────────────────────────────────────────────────────────');
-      print('[HttpUtil] │ 📤 Request:');
-      print('[HttpUtil] │    Method: ${options.method}');
-      print('[HttpUtil] │    URL: ${options.uri}');
-      _logHeadersUnsafe(headers);
+      buffer.writeln('[HttpUtil] │ 📤 Request:');
+      buffer.writeln('[HttpUtil] │    Method: ${options.method}');
+      buffer.writeln('[HttpUtil] │    URL: ${options.uri}');
+      _appendHeadersToStringBuffer(buffer, headers);
       if (printBody && options.data != null) {
-        print('[HttpUtil] │    Body:');
-        print('[HttpUtil] │      ${options.data}');
+        buffer.writeln('[HttpUtil] │    Body:');
+        buffer.writeln('[HttpUtil] │      ${options.data}');
       }
       if (options.queryParameters.isNotEmpty) {
-        print('[HttpUtil] │    Query Parameters:');
+        buffer.writeln('[HttpUtil] │    Query Parameters:');
         options.queryParameters.forEach((key, value) {
-          print('[HttpUtil] │      $key: $value');
+          buffer.writeln('[HttpUtil] │      $key: $value');
         });
       }
-      print(
+      buffer.writeln(
           '[HttpUtil] │ ───────────────────────────────────────────────────────────');
-      print('[HttpUtil] │ 📥 Response:');
-      print(
+      buffer.writeln('[HttpUtil] │ 📥 Response:');
+      buffer.writeln(
           '[HttpUtil] │    Status: ${response.statusCode} ${response.statusMessage ?? ''}');
       if (printBody && response.data != null) {
-        print('[HttpUtil] │    Body:');
-        print('[HttpUtil] │      ${response.data}');
+        buffer.writeln('[HttpUtil] │    Body:');
+        buffer.writeln('[HttpUtil] │      ${response.data}');
       }
-      print(
+      buffer.writeln(
           '[HttpUtil] └─────────────────────────────────────────────────────────────');
+
+      // 按行输出所有日志内容，避免单行过长被截断
+      _printBuffer(buffer);
     });
   }
 
   /// 打印响应日志（实时模式使用）
   void _logResponse(dio_package.Response response) {
     _synchronizedLog(() async {
-      print(
+      // 使用 StringBuffer 收集所有日志内容，然后一次性输出
+      final buffer = StringBuffer();
+
+      buffer.writeln(
           '[HttpUtil] ┌─────────────────────────────────────────────────────────────');
-      print(
+      buffer.writeln(
           '[HttpUtil] │ Response: ${response.statusCode} ${response.statusMessage ?? ''}');
-      print(
+      buffer.writeln(
           '[HttpUtil] │ Request: ${response.requestOptions.method} ${response.requestOptions.uri}');
       if (printBody && response.data != null) {
-        print('[HttpUtil] │ Body:');
-        print('[HttpUtil] │   ${response.data}');
+        buffer.writeln('[HttpUtil] │ Body:');
+        buffer.writeln('[HttpUtil] │   ${response.data}');
       }
-      print(
+      buffer.writeln(
           '[HttpUtil] └─────────────────────────────────────────────────────────────');
+
+      // 按行输出所有日志内容，避免单行过长被截断
+      _printBuffer(buffer);
     });
   }
 
@@ -297,69 +328,81 @@ class LogInterceptor extends dio_package.Interceptor {
           ? DateTime.now().difference(startTime)
           : Duration.zero;
 
-      print(
+      // 使用 StringBuffer 收集所有日志内容，然后一次性输出
+      final buffer = StringBuffer();
+
+      buffer.writeln(
           '[HttpUtil] ┌─────────────────────────────────────────────────────────────');
-      print(
+      buffer.writeln(
           '[HttpUtil] │ [请求链路 #$requestId] ${options.method} ${options.uri} (耗时: ${_formatDuration(duration)}) ❌');
-      print(
+      buffer.writeln(
           '[HttpUtil] │ ───────────────────────────────────────────────────────────');
-      print('[HttpUtil] │ 📤 Request:');
-      print('[HttpUtil] │    Method: ${options.method}');
-      print('[HttpUtil] │    URL: ${options.uri}');
-      _logHeadersUnsafe(options.headers);
+      buffer.writeln('[HttpUtil] │ 📤 Request:');
+      buffer.writeln('[HttpUtil] │    Method: ${options.method}');
+      buffer.writeln('[HttpUtil] │    URL: ${options.uri}');
+      _appendHeadersToStringBuffer(buffer, options.headers);
       if (printBody && options.data != null) {
-        print('[HttpUtil] │    Body:');
-        print('[HttpUtil] │      ${options.data}');
+        buffer.writeln('[HttpUtil] │    Body:');
+        buffer.writeln('[HttpUtil] │      ${options.data}');
       }
       if (options.queryParameters.isNotEmpty) {
-        print('[HttpUtil] │    Query Parameters:');
+        buffer.writeln('[HttpUtil] │    Query Parameters:');
         options.queryParameters.forEach((key, value) {
-          print('[HttpUtil] │      $key: $value');
+          buffer.writeln('[HttpUtil] │      $key: $value');
         });
       }
-      print(
+      buffer.writeln(
           '[HttpUtil] │ ───────────────────────────────────────────────────────────');
-      print('[HttpUtil] │ ❌ Error:');
-      print('[HttpUtil] │    Type: ${error.type.toString()}');
+      buffer.writeln('[HttpUtil] │ ❌ Error:');
+      buffer.writeln('[HttpUtil] │    Type: ${error.type.toString()}');
       if (error.response != null) {
         final statusCode = error.response!.statusCode;
-        print(
+        buffer.writeln(
             '[HttpUtil] │    Status: $statusCode ${error.response!.statusMessage ?? ''}');
         if (printBody && error.response!.data != null) {
-          print('[HttpUtil] │    Body:');
-          print('[HttpUtil] │      ${error.response!.data}');
+          buffer.writeln('[HttpUtil] │    Body:');
+          buffer.writeln('[HttpUtil] │      ${error.response!.data}');
         }
       }
       if (error.message != null) {
-        print('[HttpUtil] │    Message: ${error.message!}');
+        buffer.writeln('[HttpUtil] │    Message: ${error.message!}');
       }
-      print(
+      buffer.writeln(
           '[HttpUtil] └─────────────────────────────────────────────────────────────');
+
+      // 按行输出所有日志内容，避免单行过长被截断
+      _printBuffer(buffer);
     });
   }
 
   /// 打印错误日志（实时模式使用）
   void _logError(dio_package.DioException error) {
     _synchronizedLog(() async {
-      print(
+      // 使用 StringBuffer 收集所有日志内容，然后一次性输出
+      final buffer = StringBuffer();
+
+      buffer.writeln(
           '[HttpUtil] ┌─────────────────────────────────────────────────────────────');
-      print('[HttpUtil] │ Error: ${error.type.toString()}');
-      print(
+      buffer.writeln('[HttpUtil] │ Error: ${error.type.toString()}');
+      buffer.writeln(
           '[HttpUtil] │ Request: ${error.requestOptions.method} ${error.requestOptions.uri}');
       if (error.response != null) {
         final statusCode = error.response!.statusCode;
-        print(
+        buffer.writeln(
             '[HttpUtil] │ Response: $statusCode ${error.response!.statusMessage ?? ''}');
         if (printBody && error.response!.data != null) {
-          print('[HttpUtil] │ Body:');
-          print('[HttpUtil] │   ${error.response!.data}');
+          buffer.writeln('[HttpUtil] │ Body:');
+          buffer.writeln('[HttpUtil] │   ${error.response!.data}');
         }
       }
       if (error.message != null) {
-        print('[HttpUtil] │    Message: ${error.message!}');
+        buffer.writeln('[HttpUtil] │    Message: ${error.message!}');
       }
-      print(
+      buffer.writeln(
           '[HttpUtil] └─────────────────────────────────────────────────────────────');
+
+      // 按行输出所有日志内容，避免单行过长被截断
+      _printBuffer(buffer);
     });
   }
 
