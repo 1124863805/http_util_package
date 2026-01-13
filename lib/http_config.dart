@@ -1,3 +1,18 @@
+/// 日志打印模式
+enum LogMode {
+  /// 完整链路模式（推荐）- 响应时一起打印请求+响应+耗时
+  /// 优点：请求-响应完美关联，并发友好，自动显示耗时
+  complete,
+
+  /// 实时模式 - 请求和响应分别打印
+  /// 优点：实时性好，立即看到请求发出
+  realTime,
+
+  /// 简要模式 - 只打印关键信息
+  /// 优点：日志简洁，适合生产环境
+  brief,
+}
+
 /// HTTP 工具类配置
 /// 用于配置请求头、错误处理等
 class HttpConfig {
@@ -23,6 +38,25 @@ class HttpConfig {
   /// 如果为 null，则不显示错误提示
   final void Function(String title, String message)? onError;
 
+  /// 是否启用日志打印（默认 false）
+  /// 启用后会自动打印请求和响应信息
+  final bool enableLogging;
+
+  /// 日志打印级别
+  /// - true: 打印请求和响应（包含 body）
+  /// - false: 只打印请求和响应（不包含 body）
+  final bool logPrintBody;
+
+  /// 日志打印模式（默认 complete）
+  /// - LogMode.complete: 完整链路模式（推荐）- 响应时一起打印请求+响应+耗时
+  /// - LogMode.realTime: 实时模式 - 请求和响应分别打印
+  /// - LogMode.brief: 简要模式 - 只打印关键信息
+  final LogMode logMode;
+
+  /// 是否在请求时显示简要提示（仅在 complete 模式下有效，默认 true）
+  /// 如果为 true，请求时会打印一行简要信息，如 "→ POST /api/login"
+  final bool logShowRequestHint;
+
   HttpConfig({
     required this.baseUrl,
     this.staticHeaders,
@@ -30,5 +64,9 @@ class HttpConfig {
     this.networkErrorKey,
     this.tipTitleKey,
     this.onError,
+    this.enableLogging = false,
+    this.logPrintBody = true,
+    this.logMode = LogMode.complete,
+    this.logShowRequestHint = true,
   });
 }

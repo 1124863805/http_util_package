@@ -2,6 +2,7 @@ import 'package:dio/dio.dart' as dio_package;
 import 'http_config.dart';
 import 'api_response.dart';
 import 'http_method.dart';
+import 'log_interceptor.dart';
 
 /// HTTP 请求工具类
 /// 基于 Dio 封装，支持配置化的请求头注入
@@ -27,12 +28,12 @@ class HttpUtil {
     ApiResponse.setErrorHandler(config.onError);
   }
 
-  /// 获取 Dio 实例
+  /// 获取 Dio 实例（公开访问，方便特殊处理）
+  /// 注意：使用前必须先调用 configure() 进行配置
   static dio_package.Dio get dio {
     if (_dioInstance == null) {
       if (_config == null) {
-        throw StateError(
-            'HttpUtil 未配置，请先调用 HttpUtil.configure() 进行配置');
+        throw StateError('HttpUtil 未配置，请先调用 HttpUtil.configure() 进行配置');
       }
 
       _dioInstance = dio_package.Dio();
@@ -45,7 +46,7 @@ class HttpUtil {
         validateStatus: (status) => true,
       );
 
-      // 添加请求拦截器，自动添加请求头
+      // 先添加请求拦截器，自动添加请求头（必须在日志拦截器之前）
       _dioInstance!.interceptors.add(
         dio_package.InterceptorsWrapper(
           onRequest: (options, handler) async {
@@ -74,8 +75,45 @@ class HttpUtil {
           },
         ),
       );
+
+      // 后添加日志拦截器（这样可以看到完整的 headers）
+      if (_config!.enableLogging) {
+        _dioInstance!.interceptors.add(
+          LogInterceptor(
+            printBody: _config!.logPrintBody,
+            logMode: _config!.logMode,
+            showRequestHint: _config!.logShowRequestHint,
+          ),
+        );
+      }
     }
     return _dioInstance!;
+  }
+
+  /// 创建独立的 Dio 实例（不依赖当前配置）
+  /// 适用于需要自定义 baseUrl 或不需要拦截器的场景
+  ///
+  /// 示例：
+  /// ```dart
+  /// final customDio = HttpUtil.createDio();
+  /// customDio.options.baseUrl = 'https://other-api.com';
+  /// final response = await customDio.get('/endpoint');
+  /// ```
+  static dio_package.Dio createDio({
+    String? baseUrl,
+    Duration? connectTimeout,
+    Duration? receiveTimeout,
+    Duration? sendTimeout,
+  }) {
+    final dio = dio_package.Dio();
+    dio.options = dio_package.BaseOptions(
+      baseUrl: baseUrl ?? '',
+      connectTimeout: connectTimeout ?? const Duration(seconds: 30),
+      receiveTimeout: receiveTimeout ?? const Duration(seconds: 30),
+      sendTimeout: sendTimeout ?? const Duration(seconds: 30),
+      validateStatus: (status) => true,
+    );
+    return dio;
   }
 
   /// 请求方法（返回 Dio Response）
@@ -140,8 +178,7 @@ class HttpUtil {
           onReceiveProgress: onReceiveProgress,
         );
       default:
-        throw ArgumentError(
-            '不支持的请求方式: $method，请使用 hm 常量（hm.get、hm.post 等）');
+        throw ArgumentError('不支持的请求方式: $method，请使用 hm 常量（hm.get、hm.post 等）');
     }
   }
 }
@@ -156,8 +193,7 @@ extension HttpUtilSafeCall on HttpUtil {
   ApiResponse<T> _handleNetworkError<T>() {
     final config = _config;
     if (config == null) {
-      return ApiResponse<T>(
-          code: -1, message: '网络错误，请稍后重试！', data: null);
+      return ApiResponse<T>(code: -1, message: '网络错误，请稍后重试！', data: null);
     }
 
     final errorMessage = config.networkErrorKey ?? '网络错误，请稍后重试！';
