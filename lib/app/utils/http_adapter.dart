@@ -6,6 +6,7 @@ import '../services/locale_service.dart';
 import 'user_agent_util.dart';
 import 'auth_util.dart';
 import '../../generated/locale_keys.g.dart';
+// 不再需要导入 standard_response_parser.dart，因为默认使用它
 
 /// HTTP 工具类适配器
 /// 用于在项目中配置独立的 http_util 包
@@ -15,6 +16,8 @@ class HttpAdapter {
     http_util.HttpUtil.configure(
       http_util.HttpConfig(
         baseUrl: 'https://api.holos.hk/v1',
+        // responseParser 可选，不传递则使用默认的 StandardResponseParser
+        // responseParser: StandardResponseParser(), // 如果需要自定义解析器，可以传递
         staticHeaders: {'App-Channel': AppConfig.flavor, 'app': AppConfig.app},
         dynamicHeaderBuilder: () async {
           final headers = <String, String>{};
@@ -45,7 +48,7 @@ class HttpAdapter {
           return headers;
         },
         networkErrorKey: LocaleKeys.network_error_retry,
-        onError: (message) {
+        onError: (String message) {
           final context = Get.context;
           if (context != null) {
             // message 可能是国际化键，需要翻译
