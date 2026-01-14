@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-01-14
+
+### Added
+- **文件上传支持**
+  - `uploadFile()` 方法：单文件上传，支持 File、String 路径、Uint8List 字节数组
+  - `uploadFiles()` 方法：多文件上传
+  - `UploadFile` 类：文件上传辅助类，支持自定义字段名、文件名、Content-Type
+  - 支持上传进度回调
+  - 支持额外表单数据
+- **OSS 直传支持**
+  - `uploadToUrl()` 方法：直接上传到外部 URL（阿里云 OSS、腾讯云 COS 等）
+  - 支持 PUT 和 POST 方法
+  - 支持自定义请求头
+  - 不依赖 baseUrl 配置，直接使用完整 URL
+- **Server-Sent Events (SSE) 支持**
+  - `sse()` 方法：自动连接并返回事件流（推荐使用）
+  - `sseClient()` 方法：手动控制连接（高级用法）
+  - `SSEClient` 类：SSE 客户端封装
+  - `SSEEvent` 类：SSE 事件模型
+  - `SSEStream` 类：SSE 流处理逻辑
+  - 自动复用配置的请求头（静态和动态）
+
+### Features
+- 文件上传支持 - 单文件、多文件上传，支持进度回调
+- OSS 直传支持 - 直接上传到对象存储，不经过后端服务器
+- Server-Sent Events (SSE) 支持 - 实时事件流处理
+
+### 改进
+- 优化 SSE API，提供自动连接方式，简化使用
+- 完善文档，添加文件上传、OSS 直传、SSE 的详细使用示例
+
 ## [1.0.2] - 2026-01-13
 
 ### 改进

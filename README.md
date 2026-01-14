@@ -16,12 +16,15 @@
 - ✅ 自动错误处理和提示
 - ✅ 类型安全的 HTTP 方法常量
 - ✅ 可配置的日志打印
+- ✅ 文件上传支持 - 单文件、多文件上传，支持进度回调
+- ✅ OSS 直传支持 - 直接上传到对象存储（阿里云、腾讯云等），不经过后端服务器
+- ✅ Server-Sent Events (SSE) 支持 - 实时事件流处理
 
 ## 安装
 
 ```yaml
 dependencies:
-  dio_http_util: ^1.0.2
+  dio_http_util: ^1.1.0
 ```
 
 ## 快速开始
@@ -65,6 +68,7 @@ final response = await http.send(
   method: hm.post,
   path: '/auth/login',
   data: {'email': 'user@example.com', 'code': '123456'},
+  queryParameters: {'source': 'mobile'},  // 可选：查询参数
 );
 
 // 处理响应（错误已自动处理并提示，直接提取数据即可）
@@ -74,11 +78,16 @@ final token = response.extract<String>(
 if (token != null) saveToken(token);
 ```
 
+**send 方法参数说明：**
+- `method` - HTTP 方法（必需，使用 `hm.get`、`hm.post` 等常量）
+- `path` - 请求路径（必需）
+- `data` - 请求体数据（可选）
+- `queryParameters` - URL 查询参数（可选）
+
 **说明：**
 - 如果响应失败（`isSuccess == false`），工具类会自动调用 `onError` 回调显示错误提示
 - `extract` 方法内部已检查 `isSuccess`，失败时返回 `null`
 - `onSuccess` 是可选的，仅用于让成功逻辑更清晰
-```
 
 ## 自定义响应解析器
 
@@ -426,6 +435,524 @@ final customDio = HttpUtil.createDio(
   sendTimeout: Duration(seconds: 10),
 );
 ```
+
+## 文件上传
+
+### 单文件上传
+
+**注意：** `uploadFile<T>` 中的泛型参数 `T` 表示**服务器响应的数据类型**，不是文件类型。根据你的 API 响应结构选择合适的类型。
+
+**参数说明：**
+- `path` - 请求路径（必需）
+- `file` - 文件对象（File、String 路径或 Uint8List 字节数组，必需）
+- `fieldName` - 表单字段名（默认 'file'）
+- `fileName` - 文件名（可选，如果不提供则自动提取）
+- `contentType` - Content-Type（可选，Dio 会根据文件名自动推断）
+- `additionalData` - 额外的表单数据（除了文件之外的其他字段）
+- `queryParameters` - URL 查询参数
+- `onProgress` - 上传进度回调 `(sent, total) => void`
+- `cancelToken` - 取消令牌，用于取消上传操作
+
+**返回值：**
+- 返回 `Future<Response<T>>`，其中 `T` 是服务器响应的数据类型
+- 可以通过 `response.extract<T>()` 提取数据
+- 可以通过 `response.isSuccess` 检查是否成功
+
+```dart
+import 'dart:io';
+import 'package:dio_http_util/http_util.dart';
+
+// 示例 1: 服务器返回文件 URL（String）
+final response = await http.uploadFile<String>(
+  path: '/api/upload',
+  file: File('/path/to/image.jpg'),
+  fieldName: 'avatar',
+  additionalData: {'userId': '123'},
+  queryParameters: {'category': 'avatar'},  // 查询参数
+  onProgress: (sent, total) {
+    print('上传进度: ${(sent / total * 100).toStringAsFixed(1)}%');
+  },
+  // cancelToken: cancelToken,  // 可选：用于取消上传
+);
+final fileUrl = response.extract<String>((data) => data as String?);
+
+// 示例 2: 服务器返回 JSON 对象（Map）
+final response2 = await http.uploadFile<Map<String, dynamic>>(
+  path: '/api/upload',
+  file: File('/path/to/image.jpg'),
+  fieldName: 'avatar',
+);
+final result = response2.extract<Map<String, dynamic>>(
+  (data) => data as Map<String, dynamic>?,
+);
+if (result != null) {
+  print('文件 ID: ${result['id']}');
+  print('文件 URL: ${result['url']}');
+}
+
+// 示例 3: 服务器返回自定义对象（需要定义模型类）
+class UploadResult {
+  final String id;
+  final String url;
+  UploadResult({required this.id, required this.url});
+  factory UploadResult.fromJson(Map<String, dynamic> json) {
+    return UploadResult(id: json['id'], url: json['url']);
+  }
+}
+
+final response3 = await http.uploadFile<Map<String, dynamic>>(
+  path: '/api/upload',
+  file: '/path/to/image.jpg',
+  fieldName: 'avatar',
+);
+final uploadResult = response3.extract<UploadResult>(
+  (data) => UploadResult.fromJson(data as Map<String, dynamic>),
+);
+
+// 示例 4: 使用文件路径（String）或字节数组（Uint8List）
+final response4 = await http.uploadFile<String>(
+  path: '/api/upload',
+  file: '/path/to/image.jpg',  // 文件路径
+  fieldName: 'avatar',
+);
+
+final response5 = await http.uploadFile<String>(
+  path: '/api/upload',
+  file: imageBytes,  // 字节数组
+  fieldName: 'avatar',
+  fileName: 'image.jpg',
+  contentType: 'image/jpeg',
+);
+```
+
+### 多文件上传
+
+**参数说明：**
+- `path` - 请求路径（必需）
+- `files` - 文件列表（必需，至少包含一个文件）
+- `additionalData` - 额外的表单数据（除了文件之外的其他字段）
+- `queryParameters` - URL 查询参数
+- `onProgress` - 上传进度回调 `(sent, total) => void`
+- `cancelToken` - 取消令牌，用于取消上传操作
+
+**返回值：**
+- 返回 `Future<Response<T>>`，其中 `T` 是服务器响应的数据类型
+- 可以通过 `response.extract<T>()` 提取数据
+- 可以通过 `response.isSuccess` 检查是否成功
+
+**注意：** `files` 列表不能为空，否则会抛出 `ArgumentError`。
+
+```dart
+import 'dart:io';
+import 'package:dio_http_util/http_util.dart';
+
+final response = await http.uploadFiles<String>(
+  path: '/api/upload/multiple',
+  files: [
+    UploadFile(
+      file: File('/path/to/file1.jpg'),
+      fieldName: 'images[]',
+    ),
+    UploadFile(
+      file: File('/path/to/file2.jpg'),
+      fieldName: 'images[]',
+    ),
+    UploadFile(
+      filePath: '/path/to/file3.png',
+      fieldName: 'images[]',
+      fileName: 'custom_name.png',
+      contentType: 'image/png',
+    ),
+  ],
+  additionalData: {'albumId': '456', 'description': 'My photos'},
+  queryParameters: {'albumType': 'photo'},  // 查询参数
+  onProgress: (sent, total) {
+    print('上传进度: ${(sent / total * 100).toStringAsFixed(1)}%');
+  },
+  // cancelToken: cancelToken,  // 可选：用于取消上传
+);
+
+// 处理响应
+final url = response.extract<String>((data) => data as String?);
+if (url != null) {
+  print('上传成功，文件 URL: $url');
+}
+```
+
+### UploadFile 参数说明
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `file` | `File?` | 文件对象（优先使用） |
+| `filePath` | `String?` | 文件路径（如果未提供 file） |
+| `fileBytes` | `Uint8List?` | 文件字节数据（如果未提供 file 和 filePath） |
+| `fieldName` | `String` | 表单字段名（必需，例如：'avatar', 'images[]'） |
+| `fileName` | `String?` | 文件名（可选，如果不提供则自动提取） |
+| `contentType` | `String?` | Content-Type（可选，如果不提供则自动推断） |
+
+**注意：** `file`、`filePath` 和 `fileBytes` 必须提供其中一个。
+
+### OSS 直传（前端直传到对象存储）
+
+当后端返回预签名的上传 URL 时，可以直接上传到 OSS（阿里云、腾讯云等），不经过后端服务器。
+
+**典型流程：**
+1. 前端请求后端获取预签名上传 URL
+2. 前端直接上传文件到 OSS
+3. 上传成功后，OSS 返回成功响应
+
+**示例（阿里云 OSS）：**
+
+```dart
+import 'dart:io';
+import 'package:dio_http_util/http_util.dart';
+
+// 1. 从后端获取预签名上传 URL
+final uploadInfo = await http.send<Map<String, dynamic>>(
+  method: hm.post,
+  path: '/api/oss/upload-url',
+  data: {
+    'fileName': 'image.jpg',
+    'contentType': 'image/jpeg',
+  },
+);
+
+final uploadUrl = uploadInfo.extract<String>(
+  (data) => (data as Map<String, dynamic>)['uploadUrl'] as String?,
+);
+
+if (uploadUrl != null) {
+  // 2. 直接上传到 OSS（使用 PUT 方法）
+  final response = await http.uploadToUrl(
+    uploadUrl: uploadUrl,
+    file: File('/path/to/image.jpg'),
+    method: 'PUT',  // OSS 通常使用 PUT
+    headers: {
+      'Content-Type': 'image/jpeg',
+      // 注意：OSS 签名头通常已经在 URL 中，不需要额外添加
+    },
+    onProgress: (sent, total) {
+      print('上传进度: ${(sent / total * 100).toStringAsFixed(1)}%');
+    },
+  );
+
+  // 3. 检查上传结果
+  if (response.statusCode == 200 || response.statusCode == 204) {
+    print('上传成功');
+    // 可以获取文件访问 URL
+    final fileUrl = uploadInfo.extract<String>(
+      (data) => (data as Map<String, dynamic>)['fileUrl'] as String?,
+    );
+  } else {
+    print('上传失败: ${response.statusCode}');
+  }
+}
+```
+
+**示例（腾讯云 COS，使用 POST 表单上传）：**
+
+```dart
+final response = await http.uploadToUrl(
+  uploadUrl: uploadUrl,
+  file: File('/path/to/image.jpg'),
+  method: 'POST',
+  headers: {
+    'Content-Type': 'multipart/form-data',
+  },
+  onProgress: (sent, total) {
+    print('上传进度: ${(sent / total * 100).toStringAsFixed(1)}%');
+  },
+);
+```
+
+**示例（使用文件路径或字节数组）：**
+
+```dart
+// 使用文件路径
+final response1 = await http.uploadToUrl(
+  uploadUrl: uploadUrl,
+  file: '/path/to/image.jpg',
+  method: 'PUT',
+);
+
+// 使用字节数组
+final response2 = await http.uploadToUrl(
+  uploadUrl: uploadUrl,
+  file: imageBytes,
+  method: 'PUT',
+  headers: {'Content-Type': 'image/jpeg'},
+);
+```
+
+**uploadToUrl 参数说明：**
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `uploadUrl` | `String` | 完整的上传 URL（包含签名参数，必需） |
+| `file` | `File/String/Uint8List` | 文件对象、路径或字节数组（必需） |
+| `method` | `String` | HTTP 方法，默认为 'PUT'（OSS 通常使用 PUT） |
+| `headers` | `Map<String, String>?` | 自定义请求头（OSS 签名头等） |
+| `onProgress` | `Function(int, int)?` | 上传进度回调 `(sent, total) => void` |
+| `cancelToken` | `CancelToken?` | 取消令牌，用于取消上传操作 |
+
+**返回值：**
+- 返回 `Future<dio_package.Response>`，可以直接访问 `statusCode`、`data` 等属性
+
+**输入验证：**
+- 自动验证 `uploadUrl` 是否为有效的 URL 格式，无效时抛出 `ArgumentError`
+- 自动验证 `method` 是否为有效的 HTTP 方法（GET、POST、PUT、PATCH、DELETE），无效时抛出 `ArgumentError`
+- 自动检查文件是否存在（File 或 String 路径），不存在时抛出 `FileSystemException`
+
+**注意事项：**
+- `uploadToUrl` 不依赖 `baseUrl` 配置，直接使用完整 URL
+- OSS 签名信息通常已经在 URL 中，一般不需要额外添加请求头
+- 上传成功后，OSS 通常返回 200 或 204 状态码
+- 如果需要获取文件访问 URL，通常需要从后端接口获取
+- 进度回调中的 `sent` 和 `total` 可能为 -1（未知大小），需要在回调中处理
+
+## Server-Sent Events (SSE)
+
+### 基本使用（推荐 - 自动连接）
+
+**重要：** `sse()` 方法返回的流在关闭时会**自动清理资源**，无需手动调用 `close()`。如果取消订阅，资源也会自动清理。**如果连接失败，资源也会自动清理。**
+
+**参数说明：**
+- `path` - 请求路径（必需）
+- `queryParameters` - URL 查询参数（可选）
+
+**返回值：**
+- 返回 `Future<Stream<SSEEvent>>`，可以直接监听事件
+- 如果连接失败，会抛出异常，但资源已自动清理
+
+**异常处理：**
+- 连接失败时会抛出异常（如 `StateError`、`HttpException` 等）
+- 连接失败时资源会自动清理，无需手动处理
+
+```dart
+import 'package:dio_http_util/http_util.dart';
+
+// 自动连接并获取事件流（推荐方式）
+try {
+  final stream = await http.sse(
+    path: '/api/events',
+    queryParameters: {'topic': 'notifications'},
+  );
+  
+  // 监听事件
+  final subscription = stream.listen(
+    (event) {
+      print('收到事件: ${event.data}');
+    },
+    onError: (error) {
+      print('SSE 错误: $error');
+    },
+  );
+} catch (e) {
+  // 连接失败（资源已自动清理）
+  print('SSE 连接失败: $e');
+}
+
+// 直接监听事件
+final subscription = stream.listen(
+  (event) {
+    print('收到事件: ${event.data}');
+    print('事件类型: ${event.event}');
+    print('事件 ID: ${event.id}');
+  },
+  onError: (error) {
+    print('SSE 错误: $error');
+    // 可以在这里实现重连逻辑
+  },
+  onDone: () {
+    print('SSE 连接关闭');
+  },
+);
+
+// 取消订阅时会自动清理资源，无需手动调用 close()
+// subscription.cancel();
+```
+
+### 手动控制连接（高级用法）
+
+如果需要手动控制连接时机（例如延迟连接、重连等），可以使用 `sseClient()` 方法：
+
+**参数说明：**
+- `path` - 请求路径（必需）
+- `queryParameters` - URL 查询参数（可选）
+
+**返回值：**
+- 返回 `SSEClient` 实例，需要手动调用 `connect()` 建立连接
+
+```dart
+import 'package:dio_http_util/http_util.dart';
+
+// 创建客户端（不自动连接）
+final client = http.sseClient(
+  path: '/api/events',
+  queryParameters: {'topic': 'notifications'},
+);
+
+// 稍后手动连接
+try {
+  await client.connect();
+  
+  // 监听事件
+  client.events.listen(
+    (event) {
+      print('收到事件: ${event.data}');
+    },
+    onError: (error) {
+      print('SSE 错误: $error');
+      // 可以在这里实现重连逻辑
+    },
+    onDone: () {
+      print('SSE 连接关闭');
+    },
+  );
+} catch (e) {
+  // 连接失败，需要手动清理资源
+  await client.close();
+  print('SSE 连接失败: $e');
+}
+
+// 关闭连接（在不需要时）
+await client.close();
+```
+
+### 在 Flutter Widget 中使用
+
+```dart
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:dio_http_util/http_util.dart';
+
+class NotificationPage extends StatefulWidget {
+  @override
+  _NotificationPageState createState() => _NotificationPageState();
+}
+
+class _NotificationPageState extends State<NotificationPage> {
+  StreamSubscription<SSEEvent>? _subscription;
+  final List<String> _messages = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _connectSSE();
+  }
+
+  Future<void> _connectSSE() async {
+    try {
+      // 使用自动连接方式（更简洁）
+      // 注意：连接失败或取消订阅时会自动清理资源
+      final stream = await http.sse(path: '/api/notifications');
+      
+      _subscription = stream.listen(
+        (event) {
+          setState(() {
+            _messages.add(event.data);
+          });
+        },
+        onError: (error) {
+          print('SSE 错误: $error');
+          // 可以在这里实现重连逻辑
+        },
+      );
+    } catch (e) {
+      // 连接失败（资源已自动清理）
+      print('SSE 连接失败: $e');
+      // 可以在这里实现重连逻辑
+    }
+  }
+
+  @override
+  void dispose() {
+    // 取消订阅时会自动清理资源，无需手动调用 close()
+    _subscription?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('通知')),
+      body: ListView.builder(
+        itemCount: _messages.length,
+        itemBuilder: (context, index) {
+          return ListTile(title: Text(_messages[index]));
+        },
+      ),
+    );
+  }
+}
+```
+
+### SSE 事件模型
+
+```dart
+class SSEEvent {
+  /// 事件数据（必需）
+  final String data;
+  
+  /// 事件类型（可选）
+  final String? event;
+  
+  /// 事件 ID（可选，用于重连时指定最后接收的事件）
+  final String? id;
+  
+  /// 重试间隔（毫秒，可选）
+  final int? retry;
+  
+  SSEEvent({
+    required this.data,
+    this.event,
+    this.id,
+    this.retry,
+  });
+  
+  @override
+  String toString() {
+    return 'SSEEvent(event: $event, id: $id, data: $data)';
+  }
+}
+```
+
+**字段说明：**
+- `data` - 事件数据（必需），可能包含多行数据（用换行符分隔）
+- `event` - 事件类型（可选），用于区分不同类型的事件
+- `id` - 事件 ID（可选），用于重连时指定最后接收的事件
+- `retry` - 重试间隔（毫秒，可选），服务器建议的重连间隔
+
+### SSE 客户端 API
+
+| 方法/属性 | 类型 | 说明 |
+|----------|------|------|
+| `connect()` | `Future<void>` | 建立 SSE 连接（如果已连接或正在连接中会抛出异常） |
+| `events` | `Stream<SSEEvent>` | 事件流，用于监听服务器推送的事件 |
+| `isClosed` | `bool` | 连接是否已关闭 |
+| `isConnected` | `bool` | 连接是否已建立 |
+| `close()` | `Future<void>` | 关闭连接并释放资源 |
+
+**连接状态说明：**
+- `isClosed == false && isConnected == false` - 未连接状态
+- `isClosed == false && isConnected == true` - 已连接状态
+- `isClosed == true` - 已关闭状态（无法再次使用）
+
+**注意：**
+- SSE 连接会自动使用配置的请求头（静态和动态）
+- 连接建立后，服务器会持续推送事件
+- 使用 `sse()` 方法时，流关闭会自动清理资源，无需手动调用 `close()`
+- 使用 `sse()` 方法时，如果连接失败，资源也会自动清理
+- 使用 `sseClient()` 方法时，记得在不需要时调用 `close()` 关闭连接以释放资源
+- 使用 `sseClient()` 方法时，如果连接失败，需要手动调用 `close()` 清理资源
+- 不能重复调用 `connect()`，如果已连接或正在连接中会抛出 `StateError`
+- `connect()` 可能抛出的异常：
+  - `StateError` - 如果客户端已关闭、已连接或正在连接中
+  - `HttpException` - 如果 HTTP 响应状态码不是 200（连接失败时会自动清理资源）
+  - `FormatException` - 如果 baseUrl 格式无效（在 `Uri.parse()` 时抛出）
+  - 其他网络相关异常（如连接超时、DNS 解析失败等）
+- 连接失败时，`_eventController` 会收到错误事件（如果尚未关闭）
+- 连接失败时，所有已创建的资源（HttpClient、SSEStream 等）会自动清理
 
 ## 核心设计理念
 

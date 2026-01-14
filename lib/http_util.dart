@@ -7,6 +7,9 @@ export 'http_util_impl.dart';
 export 'log_interceptor.dart';
 export 'response_parser.dart';
 export 'parsers/standard_response_parser.dart'; // 默认响应解析器
+export 'upload_file.dart'; // 文件上传辅助类
+export 'sse/sse_event.dart'; // SSE 事件模型
+export 'sse/sse_client.dart'; // SSE 客户端
 
 // 导出 Dio 类型，方便直接使用
 // 注意：隐藏 Dio 的 Response 和 LogInterceptor，使用我们自己的实现
