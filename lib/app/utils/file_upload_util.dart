@@ -22,6 +22,26 @@ class FileUploadResult {
     this.imageUrl,
   });
 
+  /// 从 JSON Map 创建 FileUploadResult
+  /// 用于从 API 响应中解析配置信息
+  factory FileUploadResult.fromConfigJson(Map<String, dynamic> json) {
+    return FileUploadResult(
+      uploadUrl: json['uploadUrl'] as String,
+      imageKey: json['key'] as String,
+      contentType: json['contentType'] as String?,
+    );
+  }
+
+  /// 复制并更新 imageUrl
+  FileUploadResult copyWith({String? imageUrl}) {
+    return FileUploadResult(
+      uploadUrl: uploadUrl,
+      imageKey: imageKey,
+      contentType: contentType,
+      imageUrl: imageUrl ?? this.imageUrl,
+    );
+  }
+
   @override
   String toString() {
     return 'FileUploadResult(uploadUrl: $uploadUrl, imageKey: $imageKey, contentType: $contentType, imageUrl: $imageUrl)';
@@ -76,7 +96,75 @@ class FileUploadUtil {
     return typeImage; // 默认图像
   }
 
-  /// 上传文件完整流程：获取配置 → 上传 OSS → 获取 URL
+  /// 上传文件完整流程：获取配置 → 上传 OSS → 获取 URL（非链式调用版本）
+  ///
+  /// 这是传统写法，用于对比链式调用的优势
+  ///
+  /// [file] 要上传的文件
+  /// [ext] 文件扩展名（可选，不提供则自动推断）
+  /// [type] 文件类型（可选，不提供则自动推断：1图像 2视频 3表格 4头像）
+  /// [onProgress] 上传进度回调
+  ///
+  /// 返回 [FileUploadResult] 或 null（失败时工具类已自动提示）
+  static Future<FileUploadResult?> uploadFileNonChain({
+    required File file,
+    String? ext,
+    int? type,
+    void Function(int sent, int total)? onProgress,
+  }) async {
+    try {
+      // 推断扩展名和类型
+      final fileExt = ext ?? _inferExtension(file);
+      final fileType = type ?? _inferType(fileExt);
+
+      // 步骤1：获取 OSS 配置
+      final configResponse = await http.send(
+        method: hm.post,
+        path: '/uploader/generate',
+        data: {'ext': fileExt, 'type': fileType},
+      );
+
+      // 提取配置信息
+      final uploadResult = configResponse.extractModel<FileUploadResult>(
+        FileUploadResult.fromConfigJson,
+      );
+
+      if (uploadResult == null) return null;
+
+      // 步骤2：上传到 OSS
+      final uploadResponse = await http.uploadToUrlResponse(
+        uploadUrl: uploadResult.uploadUrl + "23123",
+        file: file,
+        method: 'PUT',
+        headers: uploadResult.contentType != null
+            ? {'Content-Type': uploadResult.contentType!}
+            : null,
+        onProgress: onProgress,
+      );
+
+      // 检查上传是否成功
+      if (!uploadResponse.isSuccess) return null;
+
+      // 步骤3：获取图片 URL
+      final urlResponse = await http.send(
+        method: hm.post,
+        path: '/uploader/get-image-url',
+        data: {'image_key': uploadResult.imageKey},
+      );
+
+      // 提取图片 URL
+      final imageUrl = urlResponse.extractField<String>('image_url');
+
+      if (imageUrl == null) return null;
+
+      // 步骤4：更新对象并返回
+      return uploadResult.copyWith(imageUrl: imageUrl);
+    } catch (e) {
+      return null; // 错误已由工具类自动提示
+    }
+  }
+
+  /// 上传文件完整流程：获取配置 → 上传 OSS → 获取 URL（链式调用版本）
   ///
   /// [file] 要上传的文件
   /// [ext] 文件扩展名（可选，不提供则自动推断）
@@ -95,54 +183,36 @@ class FileUploadUtil {
       final fileExt = ext ?? _inferExtension(file);
       final fileType = type ?? _inferType(fileExt);
 
-      // 获取 OSS 配置
-      final ossConfig = await http.send(
-        method: hm.post,
-        path: '/uploader/generate',
-        data: {'ext': fileExt, 'type': fileType},
-      );
-
-      // 提取配置信息
-      final uploadUrl = ossConfig.extract<String>(
-        (data) => (data as Map<String, dynamic>)['uploadUrl'] as String?,
-      );
-      final imageKey = ossConfig.extract<String>(
-        (data) => (data as Map<String, dynamic>)['key'] as String?,
-      );
-      final contentType = ossConfig.extract<String>(
-        (data) => (data as Map<String, dynamic>)['contentType'] as String?,
-      );
-
-      if (uploadUrl == null || imageKey == null) return null;
-
-      // 上传到 OSS
-      final response = await http.uploadToUrl(
-        uploadUrl: uploadUrl,
-        file: file,
-        method: 'PUT',
-        headers: contentType != null ? {'Content-Type': contentType} : null,
-        onProgress: onProgress,
-      );
-
-      if (response.statusCode != 200 && response.statusCode != 204) return null;
-
-      // 获取图片 URL
-      final urlResponse = await http.send(
-        method: hm.post,
-        path: '/uploader/get-image-url',
-        data: {'image_key': imageKey},
-      );
-
-      final imageUrl = urlResponse.extract<String>(
-        (data) => (data as Map<String, dynamic>)['image_url'] as String?,
-      );
-
-      return FileUploadResult(
-        uploadUrl: uploadUrl,
-        imageKey: imageKey,
-        contentType: contentType,
-        imageUrl: imageUrl,
-      );
+      // 获取 OSS 配置 → 上传到 OSS → 获取图片 URL → 更新对象（完整链路，一套调用）
+      return await http
+          .send(
+            method: hm.post,
+            path: '/uploader/generate',
+            isLoading: true,
+            data: {'ext': fileExt, 'type': fileType},
+          )
+          .extractModel<FileUploadResult>(FileUploadResult.fromConfigJson)
+          .thenWith(
+            (uploadResult) => http.uploadToUrlResponse(
+              uploadUrl: uploadResult.uploadUrl,
+              file: file,
+              method: 'PUT',
+              headers: uploadResult.contentType != null
+                  ? {'Content-Type': uploadResult.contentType!}
+                  : null,
+              onProgress: onProgress,
+            ),
+          )
+          .thenWithUpdate<String>(
+            (uploadResult, uploadResponse) => http.send(
+              method: hm.post,
+              path: '/uploader/get-image-url',
+              data: {'image_key': uploadResult.imageKey},
+            ),
+            (response) => response.extractField<String>('image_url'),
+            (uploadResult, imageUrl) =>
+                uploadResult.copyWith(imageUrl: imageUrl),
+          );
     } catch (e) {
       return null; // 错误已由工具类自动提示
     }

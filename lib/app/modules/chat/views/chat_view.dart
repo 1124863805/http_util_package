@@ -29,8 +29,12 @@ class ChatView extends GetView<ChatController> {
             ),
             const SizedBox(height: 20),
             const Text(
-              '选择图片',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              '链式调用版本',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: Colors.green,
+              ),
             ),
             const SizedBox(height: 10),
             ElevatedButton.icon(
@@ -38,7 +42,7 @@ class ChatView extends GetView<ChatController> {
                 controller.pickImageFromGallery();
               },
               icon: const Icon(Icons.photo_library),
-              label: const Text('从相册选择'),
+              label: const Text('从相册选择（链式）'),
             ),
             const SizedBox(height: 10),
             ElevatedButton.icon(
@@ -46,7 +50,42 @@ class ChatView extends GetView<ChatController> {
                 controller.pickImageFromCamera();
               },
               icon: const Icon(Icons.camera_alt),
-              label: const Text('拍照'),
+              label: const Text('拍照（链式）'),
+            ),
+            const SizedBox(height: 30),
+            const Divider(),
+            const SizedBox(height: 30),
+            const Text(
+              '非链式调用版本',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: Colors.orange,
+              ),
+            ),
+            const SizedBox(height: 10),
+            ElevatedButton.icon(
+              onPressed: () {
+                controller.pickImageFromGalleryNonChain();
+              },
+              icon: const Icon(Icons.photo_library),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange.shade100,
+                foregroundColor: Colors.orange.shade900,
+              ),
+              label: const Text('从相册选择（非链式）'),
+            ),
+            const SizedBox(height: 10),
+            ElevatedButton.icon(
+              onPressed: () {
+                controller.pickImageFromCameraNonChain();
+              },
+              icon: const Icon(Icons.camera_alt),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange.shade100,
+                foregroundColor: Colors.orange.shade900,
+              ),
+              label: const Text('拍照（非链式）'),
             ),
             const SizedBox(height: 30),
             // 显示上传的图片

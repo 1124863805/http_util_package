@@ -62,6 +62,11 @@ class HttpAdapter {
             );
           }
         },
+        // 配置加载提示功能
+        // 使用 Get.context，工具包会尝试多种方式查找 Overlay
+        contextGetter: () => Get.context,
+        // 可选：自定义加载提示 UI
+        // loadingWidgetBuilder: (context) => YourCustomLoadingWidget(),
         // 启用日志打印
         enableLogging: true,
         logPrintBody: true,

@@ -243,7 +243,7 @@ class ChatController extends GetxController {
     }
   }
 
-  /// 上传图片（工具类自动推断扩展名和类型）
+  /// 上传图片（链式调用版本）
   Future<void> _uploadImage(File file) async {
     final result = await FileUploadUtil.uploadFile(
       file: file,
@@ -256,7 +256,65 @@ class ChatController extends GetxController {
 
     if (result?.imageUrl != null) {
       uploadedImageUrl.value = result!.imageUrl!;
-      Get.snackbar('成功', '图片上传成功', snackPosition: SnackPosition.BOTTOM);
+      Get.snackbar('成功', '图片上传成功（链式调用）', snackPosition: SnackPosition.BOTTOM);
+    }
+  }
+
+  /// 上传图片（非链式调用版本，用于对比）
+  Future<void> _uploadImageNonChain(File file) async {
+    final result = await FileUploadUtil.uploadFileNonChain(
+      file: file,
+      onProgress: (sent, total) {
+        if (total > 0) {
+          print('上传进度: ${(sent / total * 100).toStringAsFixed(1)}%');
+        }
+      },
+    );
+
+    if (result?.imageUrl != null) {
+      uploadedImageUrl.value = result!.imageUrl!;
+      Get.snackbar('成功', '图片上传成功（非链式调用）', snackPosition: SnackPosition.BOTTOM);
+    }
+  }
+
+  /// 从相册选择图片（非链式调用版本）
+  Future<void> pickImageFromGalleryNonChain() async {
+    if (!await _requestPhotoPermission()) return;
+
+    try {
+      final result = await AssetPicker.pickAssets(
+        Get.context!,
+        pickerConfig: const AssetPickerConfig(
+          maxAssets: 1,
+          requestType: RequestType.image,
+        ),
+      );
+
+      final file = await result?.first.file;
+      if (file != null) {
+        await _uploadImageNonChain(file);
+      }
+    } catch (e) {
+      Get.snackbar('错误', '选择图片失败: $e', snackPosition: SnackPosition.BOTTOM);
+    }
+  }
+
+  /// 从相机拍摄图片（非链式调用版本）
+  Future<void> pickImageFromCameraNonChain() async {
+    if (!await _requestCameraPermission()) return;
+
+    try {
+      final result = await CameraPicker.pickFromCamera(
+        Get.context!,
+        pickerConfig: const CameraPickerConfig(enableAudio: false),
+      );
+
+      final file = await result?.file;
+      if (file != null) {
+        await _uploadImageNonChain(file);
+      }
+    } catch (e) {
+      Get.snackbar('错误', '拍摄图片失败: $e', snackPosition: SnackPosition.BOTTOM);
     }
   }
 }
