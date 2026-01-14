@@ -42,6 +42,9 @@ dependencies:
     path: ../http_util_package
   package_info_plus: ^9.0.0
   device_info_plus: ^12.3.0
+  wechat_assets_picker: ^10.1.0
+  wechat_camera_picker: ^4.4.0
+  permission_handler: ^12.0.1
 
 dev_dependencies:
   flutter_test:

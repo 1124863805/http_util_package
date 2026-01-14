@@ -52,5 +52,13 @@
 		<string>ja</string>
 		<string>ko</string>
 	</array>
+	<!-- 相机权限 -->
+	<key>NSCameraUsageDescription</key>
+	<string>需要访问相机以拍摄照片</string>
+	<!-- 相册权限 -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>需要访问相册以选择照片</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>需要访问相册以保存照片</string>
 </dict>
 </plist>
