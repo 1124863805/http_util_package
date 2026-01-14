@@ -10,8 +10,9 @@ import 'log_interceptor.dart';
 import 'simple_error_response.dart';
 import 'api_response.dart';
 import 'upload_file.dart';
-import 'sse/sse_client.dart';
 import 'sse/sse_event.dart';
+import 'sse/sse_connection.dart';
+import 'sse/sse_manager.dart';
 import 'widgets/loading_widget.dart';
 
 /// HTTP 请求工具类
@@ -785,136 +786,118 @@ extension HttpUtilFileUpload on HttpUtil {
 
 /// HttpUtil SSE 扩展方法
 extension HttpUtilSSE on HttpUtil {
-  /// 建立 Server-Sent Events (SSE) 连接（自动连接）
+  /// 创建 SSE 连接管理器
   ///
-  /// [path] 请求路径
-  /// [queryParameters] URL 查询参数
+  /// 用于管理多个 SSE 连接，支持同时维护多个连接
+  /// 这是唯一的 SSE API，支持单连接和多连接场景
   ///
-  /// 返回已连接的事件流，可以直接监听
-  /// 注意：流关闭时会自动清理资源，无需手动调用 close()
-  ///
-  /// 示例：
+  /// **单连接场景**：
   /// ```dart
-  /// // 自动连接并监听事件
-  /// final stream = await http.sse(
-  ///   path: '/api/events',
-  ///   queryParameters: {'topic': 'notifications'},
+  /// final manager = http.sseManager();
+  ///
+  /// await manager.connect(
+  ///   id: 'chat',
+  ///   path: '/ai/chat/stream',
+  ///   method: 'POST',
+  ///   data: {'question': '你好'},
+  ///   onData: (event) => print('收到: ${event.data}'),
   /// );
   ///
-  /// final subscription = stream.listen(
-  ///   (event) {
-  ///     print('收到事件: ${event.data}');
-  ///   },
-  ///   onError: (error) {
-  ///     print('SSE 错误: $error');
-  ///   },
-  ///   onDone: () {
-  ///     print('SSE 连接关闭');
-  ///   },
-  /// );
-  ///
-  /// // 取消订阅时会自动清理资源
-  /// // subscription.cancel();
+  /// // 断开连接
+  /// await manager.disconnect('chat');
   /// ```
   ///
-  /// 如果需要手动控制连接，使用 `sseClient()` 方法
-  Future<Stream<SSEEvent>> sse({
-    required String path,
-    Map<String, String>? queryParameters,
-  }) async {
-    final client = sseClient(
-      path: path,
-      queryParameters: queryParameters,
-    );
+  /// **多连接场景**：
+  /// ```dart
+  /// final manager = http.sseManager();
+  ///
+  /// // 建立第一个连接
+  /// await manager.connect(
+  ///   id: 'chat',
+  ///   path: '/ai/chat/stream',
+  ///   method: 'POST',
+  ///   data: {'question': '你好'},
+  ///   onData: (event) => print('聊天: ${event.data}'),
+  /// );
+  ///
+  /// // 建立第二个连接
+  /// await manager.connect(
+  ///   id: 'notifications',
+  ///   path: '/notifications/stream',
+  ///   onData: (event) => print('通知: ${event.data}'),
+  /// );
+  ///
+  /// // 断开指定连接
+  /// await manager.disconnect('chat');
+  ///
+  /// // 断开所有连接
+  /// await manager.disconnectAll();
+  /// ```
+  SSEManager sseManager() {
+    return _SSEManagerImpl();
+  }
+}
 
-    // 如果连接失败，确保清理资源
-    try {
-      await client.connect();
-    } catch (e) {
-      // 连接失败时清理客户端资源
-      await client.close();
-      rethrow;
+/// SSE 管理器实现类（内部使用）
+class _SSEManagerImpl extends SSEManager {
+  _SSEManagerImpl();
+
+  @override
+  Future<String> connect({
+    required String id,
+    required String path,
+    String method = 'GET',
+    dynamic data,
+    Map<String, String>? queryParameters,
+    required void Function(SSEEvent event) onData,
+    void Function(Object error)? onError,
+    void Function()? onDone,
+    bool replaceIfExists = true,
+  }) async {
+    // 如果连接已存在
+    if (hasConnection(id)) {
+      if (replaceIfExists) {
+        // 断开旧连接
+        await disconnect(id);
+      } else {
+        // 不替换，直接返回
+        return id;
+      }
     }
 
-    // 创建包装流，在流关闭时自动清理客户端资源
-    final controller = StreamController<SSEEvent>.broadcast();
-    late StreamSubscription<SSEEvent> subscription;
-    // 使用标志位防止 client.close() 被重复调用（竞态条件保护）
-    bool _clientClosed = false;
-
-    subscription = client.events.listen(
-      (event) {
-        if (!controller.isClosed) {
-          controller.add(event);
-        }
-      },
-      onError: (error) {
-        if (!controller.isClosed) {
-          controller.addError(error);
-        }
-      },
-      onDone: () {
-        if (!controller.isClosed) {
-          controller.close();
-        }
-        // 流关闭时自动清理资源（使用标志位防止重复关闭）
-        if (!_clientClosed) {
-          _clientClosed = true;
-          client.close();
-        }
-      },
-      cancelOnError: false,
-    );
-
-    // 如果控制器被关闭（用户取消订阅），也要清理资源
-    controller.onCancel = () {
-      subscription.cancel();
-      // 使用标志位防止重复关闭（竞态条件保护）
-      if (!_clientClosed) {
-        _clientClosed = true;
-        client.close();
-      }
-    };
-
-    return controller.stream;
-  }
-
-  /// 创建 SSE 客户端（不自动连接）
-  ///
-  /// 适用于需要手动控制连接时机的场景
-  ///
-  /// 示例：
-  /// ```dart
-  /// final client = http.sseClient(
-  ///   path: '/api/events',
-  /// );
-  ///
-  /// // 稍后手动连接
-  /// await client.connect();
-  ///
-  /// client.events.listen((event) {
-  ///   print('收到事件: ${event.data}');
-  /// });
-  ///
-  /// // 关闭连接
-  /// await client.close();
-  /// ```
-  SSEClient sseClient({
-    required String path,
-    Map<String, String>? queryParameters,
-  }) {
+    // 获取配置
     final config = HttpUtilSafeCall._config;
     if (config == null) {
       throw StateError('HttpUtil 未配置，请先调用 HttpUtil.configure() 进行配置');
     }
 
-    return SSEClient(
+    // 直接使用 SSEConnection.connect 建立连接
+    final connection = await SSEConnection.connect(
       baseUrl: config.baseUrl,
       path: path,
+      method: method,
+      data: data,
       queryParameters: queryParameters,
       staticHeaders: config.staticHeaders,
       dynamicHeaderBuilder: config.dynamicHeaderBuilder,
     );
+
+    // 监听事件
+    connection.listen(
+      onData: onData,
+      onError: onError,
+      onDone: onDone,
+    );
+
+    // 保存连接对象
+    addConnection(id, connection);
+
+    // 创建取消函数
+    addCancelFunction(id, () async {
+      await connection.disconnect();
+    });
+
+    return id;
   }
 }
 

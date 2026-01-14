@@ -9,7 +9,9 @@ import 'sse_stream.dart';
 class SSEClient {
   final String baseUrl;
   final String path;
+  final String method; // HTTP 方法（GET 或 POST）
   final Map<String, String>? queryParameters;
+  final dynamic data; // 请求体数据（POST 请求时使用）
   final Map<String, String>? staticHeaders;
   final Future<Map<String, String>> Function()? dynamicHeaderBuilder;
   HttpClient? _httpClient;
@@ -26,7 +28,9 @@ class SSEClient {
   SSEClient({
     required this.baseUrl,
     required this.path,
+    this.method = 'GET',
     this.queryParameters,
+    this.data,
     this.staticHeaders,
     this.dynamicHeaderBuilder,
   });
@@ -63,11 +67,21 @@ class SSEClient {
       // 创建 HTTP 客户端
       _httpClient = HttpClient();
 
-      // 创建请求
-      _request = await _httpClient!.getUrl(uri);
+      // 根据方法创建请求
+      final upperMethod = method.toUpperCase();
+      if (upperMethod == 'POST') {
+        _request = await _httpClient!.postUrl(uri);
+      } else {
+        _request = await _httpClient!.getUrl(uri);
+      }
 
       // 设置请求头（必须 await，因为动态请求头构建是异步的）
       await _setHeaders();
+
+      // 如果是 POST 请求且有数据，写入请求体
+      if (upperMethod == 'POST' && data != null) {
+        await _writeRequestBody();
+      }
 
       // 发送请求
       _response = await _request!.close();
@@ -120,33 +134,33 @@ class SSEClient {
   }
 
   /// 构建 URI
-  /// 使用 Uri.resolve 确保 URL 构建正确，避免双斜杠等问题
+  /// 正确处理 baseUrl 中的路径部分，确保路径拼接正确
   Uri _buildUri() {
     // 解析 baseUrl
     final baseUri = Uri.parse(baseUrl);
 
-    // 使用 resolve 方法构建完整 URL，自动处理路径拼接
-    final resolvedUri = baseUri.resolve(path);
+    // 构建完整路径：baseUrl 的路径 + path
+    // 处理路径拼接，避免双斜杠或缺少斜杠
+    String fullPath;
+    final basePath = baseUri.path;
+    final requestPath = path.startsWith('/') ? path : '/$path';
 
-    // 合并查询参数
-    final queryParams = <String, String>{};
-
-    // 添加现有查询参数（从 resolvedUri）
-    if (resolvedUri.hasQuery) {
-      resolvedUri.queryParameters.forEach((key, value) {
-        queryParams[key] = value;
-      });
+    if (basePath.isEmpty || basePath == '/') {
+      fullPath = requestPath;
+    } else {
+      // 确保 basePath 以 / 结尾，requestPath 不以 / 开头（或去掉开头的 /）
+      final normalizedBasePath =
+          basePath.endsWith('/') ? basePath : '$basePath/';
+      final normalizedRequestPath =
+          requestPath.startsWith('/') ? requestPath.substring(1) : requestPath;
+      fullPath = '$normalizedBasePath$normalizedRequestPath';
     }
 
-    // 添加新查询参数（优先级更高，会覆盖现有参数）
-    if (queryParameters != null) {
-      queryParams.addAll(queryParameters!);
-    }
-
-    // 如果有查询参数，替换 URI
-    if (queryParams.isNotEmpty) {
-      return resolvedUri.replace(queryParameters: queryParams);
-    }
+    // 构建完整 URI
+    final resolvedUri = baseUri.replace(
+      path: fullPath,
+      queryParameters: queryParameters,
+    );
 
     return resolvedUri;
   }
@@ -158,6 +172,11 @@ class SSEClient {
     // 设置 SSE 必需的请求头
     _request!.headers.set('Accept', 'text/event-stream');
     _request!.headers.set('Cache-Control', 'no-cache');
+
+    // 如果是 POST 请求且有数据，设置 Content-Type
+    if (method.toUpperCase() == 'POST' && data != null) {
+      _request!.headers.set('Content-Type', 'application/json');
+    }
 
     // 添加静态请求头
     if (staticHeaders != null) {
@@ -173,6 +192,26 @@ class SSEClient {
         _request!.headers.set(key, value);
       });
     }
+  }
+
+  /// 写入请求体（POST 请求时使用）
+  Future<void> _writeRequestBody() async {
+    if (_request == null || data == null) return;
+
+    // 将数据转换为 JSON 字符串
+    String jsonString;
+    if (data is Map || data is List) {
+      jsonString = jsonEncode(data);
+    } else if (data is String) {
+      jsonString = data;
+    } else {
+      jsonString = data.toString();
+    }
+
+    // 将字符串编码为字节后写入请求体
+    final encodedData = utf8.encode(jsonString);
+    _request!.add(encodedData);
+    await _request!.flush();
   }
 
   /// 处理响应流

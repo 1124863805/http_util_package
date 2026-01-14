@@ -974,177 +974,118 @@ final response2 = await http.uploadToUrlResponse(
 
 ## Server-Sent Events (SSE)
 
-### 基本使用（推荐 - 自动连接）
+### 基本使用
 
-**重要：** `sse()` 方法返回的流在关闭时会**自动清理资源**，无需手动调用 `close()`。如果取消订阅，资源也会自动清理。**如果连接失败，资源也会自动清理。**
+使用 `sseManager()` 创建连接管理器，支持单连接和多连接场景。
 
-**参数说明：**
-- `path` - 请求路径（必需）
-- `queryParameters` - URL 查询参数（可选）
-
-**返回值：**
-- 返回 `Future<Stream<SSEEvent>>`，可以直接监听事件
-- 如果连接失败，会抛出异常，但资源已自动清理
-
-**异常处理：**
-- 连接失败时会抛出异常（如 `StateError`、`HttpException` 等）
-- 连接失败时资源会自动清理，无需手动处理
-
+**单连接场景**：
 ```dart
 import 'package:dio_http_util/http_util.dart';
 
-// 自动连接并获取事件流（推荐方式）
-try {
-  final stream = await http.sse(
-    path: '/api/events',
-    queryParameters: {'topic': 'notifications'},
-  );
-  
-  // 监听事件
-  final subscription = stream.listen(
-    (event) {
-      print('收到事件: ${event.data}');
-    },
-    onError: (error) {
-      print('SSE 错误: $error');
-    },
-  );
-} catch (e) {
-  // 连接失败（资源已自动清理）
-  print('SSE 连接失败: $e');
-}
+final manager = http.sseManager();
 
-// 直接监听事件
-final subscription = stream.listen(
-  (event) {
+// 建立连接
+await manager.connect(
+  id: 'chat',
+  path: '/ai/chat/stream',
+  method: 'POST',
+  data: {'question': '你好'},
+  onData: (event) {
     print('收到事件: ${event.data}');
-    print('事件类型: ${event.event}');
-    print('事件 ID: ${event.id}');
   },
   onError: (error) {
     print('SSE 错误: $error');
-    // 可以在这里实现重连逻辑
   },
   onDone: () {
     print('SSE 连接关闭');
   },
 );
 
-// 取消订阅时会自动清理资源，无需手动调用 close()
-// subscription.cancel();
+// 断开连接
+await manager.disconnect('chat');
 ```
 
-### 手动控制连接（高级用法）
-
-如果需要手动控制连接时机（例如延迟连接、重连等），可以使用 `sseClient()` 方法：
-
-**参数说明：**
-- `path` - 请求路径（必需）
-- `queryParameters` - URL 查询参数（可选）
-
-**返回值：**
-- 返回 `SSEClient` 实例，需要手动调用 `connect()` 建立连接
-
+**多连接场景**：
 ```dart
-import 'package:dio_http_util/http_util.dart';
+final manager = http.sseManager();
 
-// 创建客户端（不自动连接）
-final client = http.sseClient(
-  path: '/api/events',
-  queryParameters: {'topic': 'notifications'},
+// 建立第一个连接
+await manager.connect(
+  id: 'chat',
+  path: '/ai/chat/stream',
+  method: 'POST',
+  data: {'question': '你好'},
+  onData: (event) => print('聊天: ${event.data}'),
 );
 
-// 稍后手动连接
-try {
-  await client.connect();
-  
-  // 监听事件
-  client.events.listen(
-    (event) {
-      print('收到事件: ${event.data}');
-    },
-    onError: (error) {
-      print('SSE 错误: $error');
-      // 可以在这里实现重连逻辑
-    },
-    onDone: () {
-      print('SSE 连接关闭');
-    },
-  );
-} catch (e) {
-  // 连接失败，需要手动清理资源
-  await client.close();
-  print('SSE 连接失败: $e');
-}
+// 建立第二个连接
+await manager.connect(
+  id: 'notifications',
+  path: '/notifications/stream',
+  onData: (event) => print('通知: ${event.data}'),
+);
 
-// 关闭连接（在不需要时）
-await client.close();
+// 断开指定连接
+await manager.disconnect('chat');
+
+// 断开所有连接
+await manager.disconnectAll();
 ```
 
-### 在 Flutter Widget 中使用
+### 完整示例：实时聊天页面
 
 ```dart
-import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:dio_http_util/http_util.dart';
 
-class NotificationPage extends StatefulWidget {
-  @override
-  _NotificationPageState createState() => _NotificationPageState();
-}
-
-class _NotificationPageState extends State<NotificationPage> {
-  StreamSubscription<SSEEvent>? _subscription;
-  final List<String> _messages = [];
+class ChatController extends GetxController {
+  final sseMessage = ''.obs;
+  final isSSEConnected = false.obs;
+  SSEManager? _sseManager;
 
   @override
-  void initState() {
-    super.initState();
-    _connectSSE();
+  void onInit() {
+    super.onInit();
+    _sseManager = http.sseManager();
   }
 
-  Future<void> _connectSSE() async {
+  @override
+  void onClose() {
+    _sseManager?.disconnectAll();
+    super.onClose();
+  }
+
+  Future<void> connectSSE(String question) async {
     try {
-      // 使用自动连接方式（更简洁）
-      // 注意：连接失败或取消订阅时会自动清理资源
-      final stream = await http.sse(path: '/api/notifications');
-      
-      _subscription = stream.listen(
-        (event) {
-          setState(() {
-            _messages.add(event.data);
-          });
+      isSSEConnected.value = true;
+      sseMessage.value = '';
+
+      await _sseManager!.connect(
+        id: 'chat',
+        path: '/ai/chat/stream',
+        method: 'POST',
+        data: {'question': question},
+        onData: (event) {
+          sseMessage.value += event.data;
         },
         onError: (error) {
-          print('SSE 错误: $error');
-          // 可以在这里实现重连逻辑
+          isSSEConnected.value = false;
+          Get.snackbar('错误', 'SSE 连接错误: $error');
+        },
+        onDone: () {
+          isSSEConnected.value = false;
         },
       );
     } catch (e) {
-      // 连接失败（资源已自动清理）
-      print('SSE 连接失败: $e');
-      // 可以在这里实现重连逻辑
+      isSSEConnected.value = false;
+      Get.snackbar('错误', 'SSE 连接失败: $e');
     }
   }
 
-  @override
-  void dispose() {
-    // 取消订阅时会自动清理资源，无需手动调用 close()
-    _subscription?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text('通知')),
-      body: ListView.builder(
-        itemCount: _messages.length,
-        itemBuilder: (context, index) {
-          return ListTile(title: Text(_messages[index]));
-        },
-      ),
-    );
+  Future<void> disconnectSSE() async {
+    await _sseManager?.disconnect('chat');
+    isSSEConnected.value = false;
   }
 }
 ```
@@ -1159,7 +1100,7 @@ class SSEEvent {
   /// 事件类型（可选）
   final String? event;
   
-  /// 事件 ID（可选，用于重连时指定最后接收的事件）
+  /// 事件 ID（可选）
   final String? id;
   
   /// 重试间隔（毫秒，可选）
@@ -1171,11 +1112,6 @@ class SSEEvent {
     this.id,
     this.retry,
   });
-  
-  @override
-  String toString() {
-    return 'SSEEvent(event: $event, id: $id, data: $data)';
-  }
 }
 ```
 
@@ -1185,36 +1121,36 @@ class SSEEvent {
 - `id` - 事件 ID（可选），用于重连时指定最后接收的事件
 - `retry` - 重试间隔（毫秒，可选），服务器建议的重连间隔
 
-### SSE 客户端 API
+### SSE 管理器 API
 
 | 方法/属性 | 类型 | 说明 |
 |----------|------|------|
-| `connect()` | `Future<void>` | 建立 SSE 连接（如果已连接或正在连接中会抛出异常） |
-| `events` | `Stream<SSEEvent>` | 事件流，用于监听服务器推送的事件 |
-| `isClosed` | `bool` | 连接是否已关闭 |
-| `isConnected` | `bool` | 连接是否已建立 |
-| `close()` | `Future<void>` | 关闭连接并释放资源 |
+| `connect()` | `Future<String>` | 建立 SSE 连接，返回连接 ID |
+| `disconnect(id)` | `Future<void>` | 断开指定连接 |
+| `disconnectAll()` | `Future<void>` | 断开所有连接 |
+| `hasConnection(id)` | `bool` | 检查连接是否存在 |
+| `isConnected(id)` | `bool` | 检查连接是否已连接 |
+| `connectionIds` | `List<String>` | 获取所有连接 ID |
+| `connectionCount` | `int` | 获取连接数量 |
+| `dispose()` | `Future<void>` | 清理所有资源（等同于 `disconnectAll()`） |
 
-**连接状态说明：**
-- `isClosed == false && isConnected == false` - 未连接状态
-- `isClosed == false && isConnected == true` - 已连接状态
-- `isClosed == true` - 已关闭状态（无法再次使用）
+**参数说明：**
+- `id` - 连接唯一标识符（必需），用于管理多个连接
+- `path` - 请求路径（必需）
+- `method` - HTTP 方法，默认为 'GET'，支持 'GET' 和 'POST'
+- `data` - 请求体数据（POST 请求时使用，会自动转换为 JSON）
+- `queryParameters` - URL 查询参数（可选）
+- `onData` - 数据回调（必需）
+- `onError` - 错误回调（可选）
+- `onDone` - 完成回调（可选）
+- `replaceIfExists` - 如果连接已存在，是否替换（默认 true）
 
 **注意：**
 - SSE 连接会自动使用配置的请求头（静态和动态）
 - 连接建立后，服务器会持续推送事件
-- 使用 `sse()` 方法时，流关闭会自动清理资源，无需手动调用 `close()`
-- 使用 `sse()` 方法时，如果连接失败，资源也会自动清理
-- 使用 `sseClient()` 方法时，记得在不需要时调用 `close()` 关闭连接以释放资源
-- 使用 `sseClient()` 方法时，如果连接失败，需要手动调用 `close()` 清理资源
-- 不能重复调用 `connect()`，如果已连接或正在连接中会抛出 `StateError`
-- `connect()` 可能抛出的异常：
-  - `StateError` - 如果客户端已关闭、已连接或正在连接中
-  - `HttpException` - 如果 HTTP 响应状态码不是 200（连接失败时会自动清理资源）
-  - `FormatException` - 如果 baseUrl 格式无效（在 `Uri.parse()` 时抛出）
-  - 其他网络相关异常（如连接超时、DNS 解析失败等）
-- 连接失败时，`_eventController` 会收到错误事件（如果尚未关闭）
-- 连接失败时，所有已创建的资源（HttpClient、SSEStream 等）会自动清理
+- 连接失败时会自动清理资源，无需手动处理
+- 在 Controller 的 `onClose` 中调用 `disconnectAll()` 可以自动清理所有连接
+- 支持同时维护多个连接，每个连接有唯一 ID
 
 ## 核心设计理念
 
