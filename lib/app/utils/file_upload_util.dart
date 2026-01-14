@@ -133,7 +133,7 @@ class FileUploadUtil {
 
       // 步骤2：上传到 OSS
       final uploadResponse = await http.uploadToUrlResponse(
-        uploadUrl: uploadResult.uploadUrl + "23123",
+        uploadUrl: uploadResult.uploadUrl,
         file: file,
         method: 'PUT',
         headers: uploadResult.contentType != null
