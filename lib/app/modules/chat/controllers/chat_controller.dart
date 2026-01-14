@@ -1,19 +1,24 @@
-import 'dart:io';
-import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:wechat_assets_picker/wechat_assets_picker.dart';
-import 'package:wechat_camera_picker/wechat_camera_picker.dart';
-import 'package:permission_handler/permission_handler.dart';
-import '../../../utils/file_upload_util.dart';
+import 'package:dio_http_util/http_util.dart';
 
 class ChatController extends GetxController {
-  //TODO: Implement ChatController
+  // 单个连接演示
+  final sseMessage = ''.obs; // SSE 消息内容
+  final isSSEConnected = false.obs; // SSE 连接状态
 
-  final count = 0.obs;
-  final uploadedImageUrl = ''.obs; // 上传后的图片 URL
+  // 多个连接演示
+  final sseMessage1 = ''.obs; // 连接1的消息内容
+  final sseMessage2 = ''.obs; // 连接2的消息内容
+  final sseMessage3 = ''.obs; // 连接3的消息内容
+  final isMultipleSSEConnected = false.obs; // 多连接状态
+
+  SSEManager? _sseManager; // SSE 连接管理器（支持多连接）
+
   @override
   void onInit() {
     super.onInit();
+    // 创建 SSE 管理器
+    _sseManager = http.sseManager();
   }
 
   @override
@@ -23,298 +28,141 @@ class ChatController extends GetxController {
 
   @override
   void onClose() {
+    // 断开所有 SSE 连接
+    _sseManager?.disconnectAll();
     super.onClose();
   }
 
-  void increment() => count.value++;
-
-  /// 请求相机权限
-  Future<bool> _requestCameraPermission() async {
-    // 先检查当前权限状态
-    var status = await Permission.camera.status;
-    print('📱 相机权限当前状态: $status');
-
-    // 如果已经授予，直接返回
-    if (status.isGranted) {
-      print('✅ 相机权限已授予');
-      return true;
+  /// 单个连接演示：连接 SSE 并发送问题
+  Future<void> connectSSE(String question) async {
+    if (_sseManager == null) {
+      _sseManager = http.sseManager();
     }
-
-    // 如果被永久拒绝，引导用户到设置
-    if (status.isPermanentlyDenied) {
-      print('❌ 相机权限被永久拒绝，需要到设置中开启');
-      final result = await Get.dialog<bool>(
-        AlertDialog(
-          title: const Text('权限提示'),
-          content: const Text('相机权限被拒绝，请在设置中开启相机权限'),
-          actions: [
-            TextButton(
-              onPressed: () => Get.back(result: false),
-              child: const Text('取消'),
-            ),
-            TextButton(
-              onPressed: () => Get.back(result: true),
-              child: const Text('去设置'),
-            ),
-          ],
-        ),
-      );
-
-      if (result == true) {
-        // 打开应用设置页面
-        await openAppSettings();
-      }
-      return false;
-    }
-
-    // 如果被拒绝但未永久拒绝，尝试请求权限
-    if (status.isDenied) {
-      print('📱 请求相机权限...');
-      status = await Permission.camera.request();
-      print('📱 相机权限请求结果: $status');
-
-      if (status.isGranted) {
-        print('✅ 相机权限已授予');
-        return true;
-      } else if (status.isPermanentlyDenied) {
-        print('❌ 相机权限被永久拒绝');
-        final result = await Get.dialog<bool>(
-          AlertDialog(
-            title: const Text('权限提示'),
-            content: const Text('相机权限被拒绝，请在设置中开启相机权限'),
-            actions: [
-              TextButton(
-                onPressed: () => Get.back(result: false),
-                child: const Text('取消'),
-              ),
-              TextButton(
-                onPressed: () => Get.back(result: true),
-                child: const Text('去设置'),
-              ),
-            ],
-          ),
-        );
-
-        if (result == true) {
-          await openAppSettings();
-        }
-        return false;
-      } else {
-        print('❌ 相机权限被拒绝: $status');
-        Get.snackbar(
-          '权限提示',
-          '需要相机权限才能拍摄照片',
-          snackPosition: SnackPosition.BOTTOM,
-        );
-        return false;
-      }
-    }
-
-    // 其他状态（如 restricted）
-    print('❌ 相机权限状态异常: $status');
-    return false;
-  }
-
-  /// 请求相册权限
-  Future<bool> _requestPhotoPermission() async {
-    // 先检查当前权限状态
-    var status = await Permission.photos.status;
-    print('📱 相册权限当前状态: $status');
-
-    // 如果已经授予，直接返回
-    if (status.isGranted) {
-      print('✅ 相册权限已授予');
-      return true;
-    }
-
-    // 如果被永久拒绝，引导用户到设置
-    if (status.isPermanentlyDenied) {
-      print('❌ 相册权限被永久拒绝，需要到设置中开启');
-      final result = await Get.dialog<bool>(
-        AlertDialog(
-          title: const Text('权限提示'),
-          content: const Text('相册权限被拒绝，请在设置中开启相册权限'),
-          actions: [
-            TextButton(
-              onPressed: () => Get.back(result: false),
-              child: const Text('取消'),
-            ),
-            TextButton(
-              onPressed: () => Get.back(result: true),
-              child: const Text('去设置'),
-            ),
-          ],
-        ),
-      );
-
-      if (result == true) {
-        // 打开应用设置页面
-        await openAppSettings();
-      }
-      return false;
-    }
-
-    // 如果被拒绝但未永久拒绝，尝试请求权限
-    if (status.isDenied) {
-      print('📱 请求相册权限...');
-      status = await Permission.photos.request();
-      print('📱 相册权限请求结果: $status');
-
-      if (status.isGranted) {
-        print('✅ 相册权限已授予');
-        return true;
-      } else if (status.isPermanentlyDenied) {
-        print('❌ 相册权限被永久拒绝');
-        final result = await Get.dialog<bool>(
-          AlertDialog(
-            title: const Text('权限提示'),
-            content: const Text('相册权限被拒绝，请在设置中开启相册权限'),
-            actions: [
-              TextButton(
-                onPressed: () => Get.back(result: false),
-                child: const Text('取消'),
-              ),
-              TextButton(
-                onPressed: () => Get.back(result: true),
-                child: const Text('去设置'),
-              ),
-            ],
-          ),
-        );
-
-        if (result == true) {
-          await openAppSettings();
-        }
-        return false;
-      } else {
-        print('❌ 相册权限被拒绝: $status');
-        Get.snackbar(
-          '权限提示',
-          '需要相册权限才能选择图片',
-          snackPosition: SnackPosition.BOTTOM,
-        );
-        return false;
-      }
-    }
-
-    // 其他状态（如 restricted）
-    print('❌ 相册权限状态异常: $status');
-    return false;
-  }
-
-  /// 从相册选择图片
-  Future<void> pickImageFromGallery() async {
-    if (!await _requestPhotoPermission()) return;
 
     try {
-      final result = await AssetPicker.pickAssets(
-        Get.context!,
-        pickerConfig: const AssetPickerConfig(
-          maxAssets: 1,
-          requestType: RequestType.image,
-        ),
-      );
+      isSSEConnected.value = true;
+      sseMessage.value = ''; // 清空之前的消息
 
-      final file = await result?.first.file;
-      if (file != null) {
-        await _uploadImage(file);
-      }
+      // 使用 SSE 管理器建立单个连接
+      await _sseManager!.connect(
+        id: 'chat', // 连接唯一标识符
+        path: '/ai/chat/stream',
+        method: 'POST',
+        data: {'question': question},
+        onData: (event) {
+          // 累积消息内容
+          sseMessage.value += event.data;
+        },
+        onError: (error) {
+          isSSEConnected.value = false;
+          Get.snackbar(
+            '错误',
+            'SSE 连接错误: $error',
+            snackPosition: SnackPosition.BOTTOM,
+          );
+        },
+        onDone: () {
+          isSSEConnected.value = false;
+        },
+      );
     } catch (e) {
-      Get.snackbar('错误', '选择图片失败: $e', snackPosition: SnackPosition.BOTTOM);
+      isSSEConnected.value = false;
+      Get.snackbar('错误', 'SSE 连接失败: $e', snackPosition: SnackPosition.BOTTOM);
     }
   }
 
-  /// 从相机拍摄图片
-  Future<void> pickImageFromCamera() async {
-    if (!await _requestCameraPermission()) return;
+  /// 单个连接演示：断开 SSE 连接
+  Future<void> disconnectSSE() async {
+    if (_sseManager != null) {
+      await _sseManager!.disconnect('chat');
+    }
+    isSSEConnected.value = false;
+  }
+
+  /// 多个连接演示：同时建立多个 SSE 连接（都调用同一个接口）
+  Future<void> connectMultipleSSE() async {
+    if (_sseManager == null) {
+      _sseManager = http.sseManager();
+    }
 
     try {
-      final result = await CameraPicker.pickFromCamera(
-        Get.context!,
-        pickerConfig: const CameraPickerConfig(enableAudio: false),
+      isMultipleSSEConnected.value = true;
+      // 清空所有消息
+      sseMessage1.value = '';
+      sseMessage2.value = '';
+      sseMessage3.value = '';
+
+      // 连接 1：调用 /ai/chat/stream，八字问题1
+      await _sseManager!.connect(
+        id: 'chat1',
+        path: '/ai/chat/stream',
+        method: 'POST',
+        data: {'question': '什么是八字？'},
+        onData: (event) {
+          sseMessage1.value += event.data;
+        },
+        onError: (error) {
+          print('❌ 连接1错误: $error');
+          Get.snackbar(
+            '错误',
+            '连接1错误: $error',
+            snackPosition: SnackPosition.BOTTOM,
+          );
+        },
       );
 
-      final file = await result?.file;
-      if (file != null) {
-        await _uploadImage(file);
-      }
-    } catch (e) {
-      Get.snackbar('错误', '拍摄图片失败: $e', snackPosition: SnackPosition.BOTTOM);
-    }
-  }
-
-  /// 上传图片（链式调用版本）
-  Future<void> _uploadImage(File file) async {
-    final result = await FileUploadUtil.uploadFile(
-      file: file,
-      onProgress: (sent, total) {
-        if (total > 0) {
-          print('上传进度: ${(sent / total * 100).toStringAsFixed(1)}%');
-        }
-      },
-    );
-
-    if (result?.imageUrl != null) {
-      uploadedImageUrl.value = result!.imageUrl!;
-      Get.snackbar('成功', '图片上传成功（链式调用）', snackPosition: SnackPosition.BOTTOM);
-    }
-  }
-
-  /// 上传图片（非链式调用版本，用于对比）
-  Future<void> _uploadImageNonChain(File file) async {
-    final result = await FileUploadUtil.uploadFileNonChain(
-      file: file,
-      onProgress: (sent, total) {
-        if (total > 0) {
-          print('上传进度: ${(sent / total * 100).toStringAsFixed(1)}%');
-        }
-      },
-    );
-
-    if (result?.imageUrl != null) {
-      uploadedImageUrl.value = result!.imageUrl!;
-      Get.snackbar('成功', '图片上传成功（非链式调用）', snackPosition: SnackPosition.BOTTOM);
-    }
-  }
-
-  /// 从相册选择图片（非链式调用版本）
-  Future<void> pickImageFromGalleryNonChain() async {
-    if (!await _requestPhotoPermission()) return;
-
-    try {
-      final result = await AssetPicker.pickAssets(
-        Get.context!,
-        pickerConfig: const AssetPickerConfig(
-          maxAssets: 1,
-          requestType: RequestType.image,
-        ),
+      // 连接 2：调用 /ai/chat/stream，八字问题2
+      await _sseManager!.connect(
+        id: 'chat2',
+        path: '/ai/chat/stream',
+        method: 'POST',
+        data: {'question': '八字如何看财运？'},
+        onData: (event) {
+          sseMessage2.value += event.data;
+        },
+        onError: (error) {
+          print('❌ 连接2错误: $error');
+          Get.snackbar(
+            '错误',
+            '连接2错误: $error',
+            snackPosition: SnackPosition.BOTTOM,
+          );
+        },
       );
 
-      final file = await result?.first.file;
-      if (file != null) {
-        await _uploadImageNonChain(file);
-      }
-    } catch (e) {
-      Get.snackbar('错误', '选择图片失败: $e', snackPosition: SnackPosition.BOTTOM);
-    }
-  }
-
-  /// 从相机拍摄图片（非链式调用版本）
-  Future<void> pickImageFromCameraNonChain() async {
-    if (!await _requestCameraPermission()) return;
-
-    try {
-      final result = await CameraPicker.pickFromCamera(
-        Get.context!,
-        pickerConfig: const CameraPickerConfig(enableAudio: false),
+      // 连接 3：调用 /ai/chat/stream，八字问题3
+      await _sseManager!.connect(
+        id: 'chat3',
+        path: '/ai/chat/stream',
+        method: 'POST',
+        data: {'question': '八字中的五行是什么？'},
+        onData: (event) {
+          sseMessage3.value += event.data;
+        },
+        onError: (error) {
+          print('❌ 连接3错误: $error');
+          Get.snackbar(
+            '错误',
+            '连接3错误: $error',
+            snackPosition: SnackPosition.BOTTOM,
+          );
+        },
       );
-
-      final file = await result?.file;
-      if (file != null) {
-        await _uploadImageNonChain(file);
-      }
     } catch (e) {
-      Get.snackbar('错误', '拍摄图片失败: $e', snackPosition: SnackPosition.BOTTOM);
+      print('❌ 多连接失败: $e');
+      isMultipleSSEConnected.value = false;
+      Get.snackbar('错误', '多连接失败: $e', snackPosition: SnackPosition.BOTTOM);
     }
   }
+
+  /// 多个连接演示：断开所有连接
+  Future<void> disconnectMultipleSSE() async {
+    if (_sseManager != null) {
+      await _sseManager!.disconnectAll();
+    }
+    isMultipleSSEConnected.value = false;
+  }
+
+  /// 获取连接数量（用于显示）
+  int get connectionCount => _sseManager?.connectionCount ?? 0;
 }

@@ -17,7 +17,7 @@ class MainView extends GetView<MainController> {
     final List<Widget> pages = [
       const HomeView(),
       const PetView(),
-      const ChatView(),
+      ChatView(), // 不能使用 const，因为 ChatView 包含 TextEditingController
       const MineView(),
     ];
 

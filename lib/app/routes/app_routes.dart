@@ -21,6 +21,7 @@ abstract class Routes {
   static const ABOUT = _Paths.ABOUT;
   static const FEEDBACK = _Paths.FEEDBACK;
   static const BIRTH_INFO_FORM = _Paths.BIRTH_INFO_FORM;
+  static const DEMO = _Paths.DEMO;
 }
 
 abstract class _Paths {
@@ -43,4 +44,5 @@ abstract class _Paths {
   static const ABOUT = '/about';
   static const FEEDBACK = '/feedback';
   static const BIRTH_INFO_FORM = '/birth-info-form';
+  static const DEMO = '/demo';
 }

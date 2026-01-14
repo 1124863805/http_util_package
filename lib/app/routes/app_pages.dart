@@ -8,6 +8,8 @@ import '../modules/chat/bindings/chat_binding.dart';
 import '../modules/chat/views/chat_view.dart';
 import '../modules/daily_yunshi/bindings/daily_yunshi_binding.dart';
 import '../modules/daily_yunshi/views/daily_yunshi_view.dart';
+import '../modules/demo/bindings/demo_binding.dart';
+import '../modules/demo/views/demo_view.dart';
 import '../modules/feedback/bindings/feedback_binding.dart';
 import '../modules/feedback/views/feedback_view.dart';
 import '../modules/home/bindings/home_binding.dart';
@@ -55,11 +57,7 @@ class AppPages {
       page: () => const PetView(),
       binding: PetBinding(),
     ),
-    GetPage(
-      name: _Paths.CHAT,
-      page: () => const ChatView(),
-      binding: ChatBinding(),
-    ),
+    GetPage(name: _Paths.CHAT, page: () => ChatView(), binding: ChatBinding()),
     GetPage(
       name: _Paths.MINE,
       page: () => const MineView(),
@@ -134,6 +132,11 @@ class AppPages {
       name: _Paths.BIRTH_INFO_FORM,
       page: () => const BirthInfoFormView(),
       binding: BirthInfoFormBinding(),
+    ),
+    GetPage(
+      name: _Paths.DEMO,
+      page: () => const DemoView(),
+      binding: DemoBinding(),
     ),
   ];
 }
