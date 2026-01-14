@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] - 2026-01-15
+
+### Fixed
+- **修复链式调用的加载提示管理问题**
+  - 修复了链式调用中第一步设置 `isLoading: true` 时，加载提示无法被后续步骤复用的问题
+  - 现在链式调用会正确地在第一步创建加载提示，并在整个链路结束时关闭
+  - 修复了单次请求（没有后续链式调用）时，加载提示无法关闭的问题
+  - 优化了加载提示的生命周期管理，确保在各种场景下都能正确显示和关闭
+
+### 改进
+- 优化了 `send` 方法中链式调用加载提示的创建和复用逻辑
+- 在 `extractField` 方法中添加了延迟检查机制，确保单次请求的加载提示能正确关闭
+- 完善了代码注释，明确链式调用和单次请求的处理方式
+
 ## [1.2.1] - 2026-01-15
 
 ### Fixed
