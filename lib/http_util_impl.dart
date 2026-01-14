@@ -8,6 +8,7 @@ import 'response.dart';
 import 'http_method.dart';
 import 'log_interceptor.dart';
 import 'simple_error_response.dart';
+import 'api_response.dart';
 import 'upload_file.dart';
 import 'sse/sse_client.dart';
 import 'sse/sse_event.dart';
@@ -24,6 +25,9 @@ class HttpUtil {
 
   /// 维护加载提示的映射（loadingId -> OverlayEntry）
   static final Map<String, OverlayEntry> _loadingOverlays = {};
+
+  /// 链式调用的加载提示 ID（用于整个链路共享一个加载提示）
+  static String? _chainLoadingId;
 
   /// 单例获取
   static HttpUtil get instance {
@@ -203,6 +207,21 @@ class HttpUtil {
 /// HttpUtil 扩展方法
 /// 提供安全调用方法，自动处理异常和错误提示
 extension HttpUtilSafeCall on HttpUtil {
+  /// 关闭链式调用的加载提示（供 response.dart 使用）
+  static void closeChainLoading() {
+    if (HttpUtil._chainLoadingId != null) {
+      final loadingId = HttpUtil._chainLoadingId;
+      HttpUtil._chainLoadingId = null;
+      final overlayEntry = HttpUtil._loadingOverlays.remove(loadingId);
+      overlayEntry?.remove();
+    }
+  }
+
+  /// 检查是否已有链式调用的加载提示（供 response.dart 使用）
+  static bool hasChainLoading() {
+    return HttpUtil._chainLoadingId != null;
+  }
+
   /// 获取配置（内部使用）
   static HttpConfig? get _config => HttpUtil._config;
 
@@ -277,6 +296,22 @@ extension HttpUtilSafeCall on HttpUtil {
   /// [method] 请求方式：必须使用 hm.get、hm.post 等常量
   /// [isLoading] 是否显示加载提示（默认 false）
   /// 如果为 true 且配置了 contextGetter，将自动显示加载提示
+  ///
+  /// **链式调用中的加载提示**：
+  /// 如果在链式调用中第一步设置了 `isLoading: true`，整个链路只会显示一个加载提示
+  /// 加载提示会在整个链路结束时（成功或失败）自动关闭
+  ///
+  /// 示例（链式调用）：
+  /// ```dart
+  /// final result = await http.send(
+  ///   method: hm.post,
+  ///   path: '/uploader/generate',
+  ///   data: {'ext': 'jpg'},
+  ///   isLoading: true, // 第一步设置 isLoading，整个链路共享一个加载提示
+  /// )
+  /// .extractModel<FileUploadResult>(FileUploadResult.fromConfigJson)
+  /// .thenWith((uploadResult) => http.uploadToUrlResponse(...)); // 后续步骤不需要设置 isLoading
+  /// ```
   Future<Response<T>> send<T>({
     required String method,
     required String path,
@@ -285,6 +320,7 @@ extension HttpUtilSafeCall on HttpUtil {
     bool isLoading = false,
   }) async {
     String? loadingId;
+    bool isChainCall = false;
 
     // 如果需要显示加载提示
     if (isLoading) {
@@ -292,7 +328,17 @@ extension HttpUtilSafeCall on HttpUtil {
       if (config?.contextGetter != null) {
         final context = config!.contextGetter!();
         if (context != null) {
-          loadingId = _showLoading(context, config);
+          // 检查是否已有链式调用的加载提示
+          if (HttpUtil._chainLoadingId != null) {
+            // 链式调用中已有加载提示，复用现有的
+            loadingId = HttpUtil._chainLoadingId;
+            isChainCall = true;
+          } else {
+            // 单次请求：创建新的加载提示，不标记为链式调用
+            loadingId = _showLoading(context, config);
+            // 注意：单次请求不设置 _chainLoadingId，也不设置 isChainCall = true
+            // 这样 finally 块中会正确关闭加载提示
+          }
         }
       }
     }
@@ -335,8 +381,9 @@ extension HttpUtilSafeCall on HttpUtil {
       // 所有异常都统一处理为网络错误
       return _handleNetworkError<T>();
     } finally {
-      // 确保关闭加载提示
-      if (isLoading && loadingId != null) {
+      // 如果不是链式调用，立即关闭加载提示
+      // 如果是链式调用，加载提示会在整个链路结束时关闭
+      if (isLoading && loadingId != null && !isChainCall) {
         _hideLoading(loadingId);
       }
     }
@@ -536,6 +583,7 @@ extension HttpUtilFileUpload on HttpUtil {
   /// 直接上传文件到外部 URL（OSS 直传）
   ///
   /// 适用于后端返回预签名上传 URL 的场景，直接上传到 OSS（阿里云、腾讯云等）
+  /// 返回 Response<T>，支持链式调用和自动错误处理
   ///
   /// [uploadUrl] 完整的上传 URL（包含签名参数）
   /// [file] 文件对象（File、String 路径或 Uint8List 字节数组）
@@ -544,52 +592,100 @@ extension HttpUtilFileUpload on HttpUtil {
   /// [onProgress] 上传进度回调 (已上传字节数, 总字节数)
   /// [cancelToken] 取消令牌
   ///
-  /// 示例（阿里云 OSS）：
+  /// 示例（链式调用）：
   /// ```dart
-  /// // 1. 从后端获取预签名上传 URL
-  /// final uploadInfo = await http.send<Map<String, dynamic>>(
-  ///   method: hm.post,
-  ///   path: '/api/oss/upload-url',
-  ///   data: {'fileName': 'image.jpg', 'contentType': 'image/jpeg'},
-  /// );
-  ///
-  /// final uploadUrl = uploadInfo.extract<String>(
-  ///   (data) => (data as Map)['uploadUrl'] as String?,
-  /// );
-  ///
-  /// if (uploadUrl != null) {
-  ///   // 2. 直接上传到 OSS
-  ///   final response = await http.uploadToUrl(
-  ///     uploadUrl: uploadUrl,
-  ///     file: File('/path/to/image.jpg'),
+  /// final result = await http
+  ///   .send(...)
+  ///   .extractModel<FileUploadResult>(FileUploadResult.fromConfigJson)
+  ///   .thenWith((uploadResult) => http.uploadToUrlResponse(
+  ///     uploadUrl: uploadResult.uploadUrl,
+  ///     file: file,
   ///     method: 'PUT',
-  ///     headers: {
-  ///       'Content-Type': 'image/jpeg',
-  ///       // OSS 签名头通常已经在 URL 中，不需要额外添加
-  ///     },
-  ///     onProgress: (sent, total) {
-  ///       print('上传进度: ${(sent / total * 100).toStringAsFixed(1)}%');
-  ///     },
-  ///   );
-  ///
-  ///   if (response.statusCode == 200 || response.statusCode == 204) {
-  ///     print('上传成功');
-  ///   }
-  /// }
+  ///     headers: uploadResult.contentType != null
+  ///         ? {'Content-Type': uploadResult.contentType!}
+  ///         : null,
+  ///   ));
   /// ```
   ///
-  /// 示例（腾讯云 COS，使用 POST 表单上传）：
+  /// 示例（单独使用）：
   /// ```dart
-  /// final response = await http.uploadToUrl(
+  /// final response = await http.uploadToUrlResponse(
   ///   uploadUrl: uploadUrl,
   ///   file: File('/path/to/image.jpg'),
-  ///   method: 'POST',
-  ///   headers: {
-  ///     'Content-Type': 'multipart/form-data',
+  ///   method: 'PUT',
+  ///   headers: {'Content-Type': 'image/jpeg'},
+  ///   onProgress: (sent, total) {
+  ///     print('上传进度: ${(sent / total * 100).toStringAsFixed(1)}%');
   ///   },
   /// );
+  ///
+  /// if (response.isSuccess) {
+  ///   print('上传成功');
+  /// }
   /// ```
-  Future<dio_package.Response> uploadToUrl({
+  Future<Response<T>> uploadToUrlResponse<T>({
+    required String uploadUrl,
+    required dynamic file,
+    String method = 'PUT',
+    Map<String, String>? headers,
+    void Function(int sent, int total)? onProgress,
+    dio_package.CancelToken? cancelToken,
+  }) async {
+    try {
+      final dioResponse = await _uploadToUrlInternal(
+        uploadUrl: uploadUrl,
+        file: file,
+        method: method,
+        headers: headers,
+        onProgress: onProgress,
+        cancelToken: cancelToken,
+      );
+
+      // 将 dio_package.Response 转换为 Response<T>
+      // OSS 直传成功通常返回 200 或 204
+      final isSuccess = dioResponse.statusCode != null &&
+          (dioResponse.statusCode == 200 || dioResponse.statusCode == 204);
+
+      final response = ApiResponse<T>(
+        code: dioResponse.statusCode ?? -1,
+        message: isSuccess ? '上传成功' : '上传失败',
+        data: dioResponse.data as T?,
+        isSuccess: isSuccess,
+      );
+
+      // 如果上传失败，自动处理错误（触发错误提示）
+      if (!isSuccess) {
+        final config = HttpUtilSafeCall._config;
+        final errorMessage = response.errorMessage ?? '上传失败，请稍后重试！';
+        // 直接使用 HttpConfig 的 onError 回调，确保错误提示能正确显示
+        if (config?.onError != null) {
+          config!.onError!(errorMessage);
+        }
+        // 同时调用 handleError（如果 ApiResponse 设置了静态错误处理器）
+        response.handleError();
+      }
+
+      return response;
+    } catch (e) {
+      // 处理错误
+      final config = HttpUtilSafeCall._config;
+      final errorMessage = config?.networkErrorKey ?? '上传失败，请稍后重试！';
+
+      if (config?.onError != null) {
+        config!.onError!(errorMessage);
+      }
+
+      return ApiResponse<T>(
+        code: -1,
+        message: errorMessage,
+        data: null,
+        isSuccess: false,
+      );
+    }
+  }
+
+  /// 内部上传方法（提取公共逻辑）
+  Future<dio_package.Response> _uploadToUrlInternal({
     required String uploadUrl,
     required dynamic file,
     String method = 'PUT',

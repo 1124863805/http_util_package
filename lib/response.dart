@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'http_util_impl.dart' show HttpUtilSafeCall;
 
 /// 响应接口
 /// 用户必须实现此接口来定义自己的响应结构
@@ -282,5 +283,331 @@ extension FutureResponseExtension<T> on Future<Response<T>> {
   Future<Response<T>> onFailure(Function(String) callback) async {
     final response = await this;
     return response.onFailure(callback);
+  }
+
+  /// 链式调用下一个请求（支持传递前一个请求的 Response）
+  /// 如果前一个请求失败，不会执行下一个请求
+  ///
+  /// 示例：
+  /// ```dart
+  /// final result = await http.send(...)
+  ///   .then((prevResponse) => http.send(
+  ///     method: hm.post,
+  ///     path: '/next-step',
+  ///     data: {'token': prevResponse.extractField<String>('token')},
+  ///   ));
+  /// ```
+  Future<Response<R>> then<R>(
+    Future<Response<R>> Function(Response<T> prevResponse) nextRequest,
+  ) async {
+    final prevResponse = await this;
+    if (!prevResponse.isSuccess) {
+      return prevResponse as Response<R>;
+    }
+    return await nextRequest(prevResponse);
+  }
+
+  /// 条件链式调用（根据前一个请求的结果决定是否执行下一个请求）
+  ///
+  /// 示例：
+  /// ```dart
+  /// final result = await http.send(...)
+  ///   .thenIf(
+  ///     (prevResponse) => prevResponse.extractField<bool>('needNextStep') == true,
+  ///     (prevResponse) => http.send(method: hm.post, path: '/next-step'),
+  ///   );
+  /// ```
+  Future<Response<R>> thenIf<R>(
+    bool Function(Response<T> prevResponse) condition,
+    Future<Response<R>> Function(Response<T> prevResponse) nextRequest,
+  ) async {
+    final prevResponse = await this;
+    if (!prevResponse.isSuccess || !condition(prevResponse)) {
+      return prevResponse as Response<R>;
+    }
+    return await nextRequest(prevResponse);
+  }
+}
+
+/// 链式调用结果包装类
+/// 用于在链路中同时传递提取的对象和响应
+class ChainResult<M, R> {
+  final M extracted;
+  final Response<R> response;
+  final bool _hasChainLoading;
+
+  ChainResult({
+    required this.extracted,
+    required this.response,
+    bool hasChainLoading = false,
+  }) : _hasChainLoading = hasChainLoading;
+
+  /// 继续链式调用，传递提取的对象和响应（中间步骤）
+  ///
+  /// 返回 ChainResult，可以继续链式调用
+  /// 如果需要最后一步更新对象，请使用 `thenWithUpdate` 方法
+  ///
+  /// 示例：中间步骤，继续链式调用
+  /// ```dart
+  /// final chainResult = await http.send(...)
+  ///   .extractModel<FileUploadResult>(FileUploadResult.fromConfigJson)
+  ///   .thenWith((uploadResult) => http.uploadToUrlResponse(...));
+  /// ```
+  ///
+  /// 注意：`thenWithUpdate` 是 `thenWith` + 提取 + 更新的便捷方法
+  /// 由于 Dart 不支持根据参数改变返回类型，所以分为两个方法
+  Future<ChainResult<M, R2>> thenWith<R2>(
+    Future<Response<R2>> Function(M extracted, Response<R> prevResponse)
+        nextRequest,
+  ) async {
+    if (!response.isSuccess) {
+      // 前一步失败，触发错误提示并关闭加载提示
+      response.handleError();
+      if (_hasChainLoading) {
+        HttpUtilSafeCall.closeChainLoading();
+      }
+      return ChainResult<M, R2>(
+        extracted: extracted,
+        response: response as Response<R2>,
+        hasChainLoading: false,
+      );
+    }
+    final nextResponse = await nextRequest(extracted, response);
+
+    // 如果下一步失败，触发错误提示并关闭加载提示
+    if (!nextResponse.isSuccess) {
+      nextResponse.handleError();
+      if (_hasChainLoading) {
+        HttpUtilSafeCall.closeChainLoading();
+      }
+    }
+
+    // 传递链式调用的加载状态
+    return ChainResult<M, R2>(
+      extracted: extracted,
+      response: nextResponse,
+      hasChainLoading: _hasChainLoading,
+    );
+  }
+
+  /// 继续链式调用，传递提取的对象和响应，并提取最终结果
+  ///
+  /// **注意**：如果第一步设置了 `isLoading: true`，整个链路只显示一个加载提示
+  /// 在链路结束时（成功或失败）自动关闭
+  Future<R2?> thenWithExtract<R2>(
+    Future<Response<dynamic>> Function(M extracted, Response<R> prevResponse)
+        nextRequest,
+    R2? Function(Response<dynamic> response) finalExtractor,
+  ) async {
+    if (!response.isSuccess) {
+      // 前一步失败，关闭加载提示
+      if (_hasChainLoading) {
+        HttpUtilSafeCall.closeChainLoading();
+      }
+      return null;
+    }
+    final nextResponse = await nextRequest(extracted, response);
+    if (!nextResponse.isSuccess) {
+      // 下一步失败，关闭加载提示
+      if (_hasChainLoading) {
+        HttpUtilSafeCall.closeChainLoading();
+      }
+      return null;
+    }
+    // 链路成功完成，关闭加载提示
+    if (_hasChainLoading) {
+      HttpUtilSafeCall.closeChainLoading();
+    }
+    return finalExtractor(nextResponse);
+  }
+
+  /// 继续链式调用，传递提取的对象和响应，更新对象并返回（最后一步）
+  ///
+  /// **说明**：这是 `thenWith` + `extractor` + `updater` 的组合便捷方法
+  /// 由于 Dart 不支持根据参数改变返回类型，所以分为两个方法：
+  /// - `thenWith`：中间步骤，返回 `ChainResult` 继续链式调用
+  /// - `thenWithUpdate`：最后一步，提取并更新对象，返回更新后的对象
+  ///
+  /// 示例：
+  /// ```dart
+  /// final result = await http.send(...)
+  ///   .extractModel<FileUploadResult>(FileUploadResult.fromConfigJson)
+  ///   .thenWith((uploadResult) => http.uploadToUrlResponse(...))
+  ///   .thenWithUpdate<String>(
+  ///     (uploadResult, uploadResponse) => http.send(...),
+  ///     (response) => response.extractField<String>('image_url'),
+  ///     (uploadResult, imageUrl) => uploadResult.copyWith(imageUrl: imageUrl),
+  ///   );
+  /// ```
+  Future<M?> thenWithUpdate<R2>(
+    Future<Response<dynamic>> Function(M extracted, Response<R> prevResponse)
+        nextRequest,
+    R2? Function(Response<dynamic> response) extractor,
+    M Function(M extracted, R2? extractedValue) updater,
+  ) async {
+    if (!response.isSuccess) {
+      // 前一步失败，触发错误提示并关闭加载提示
+      response.handleError();
+      if (_hasChainLoading) {
+        HttpUtilSafeCall.closeChainLoading();
+      }
+      return null;
+    }
+    final nextResponse = await nextRequest(extracted, response);
+    if (!nextResponse.isSuccess) {
+      // 下一步失败，触发错误提示并关闭加载提示
+      nextResponse.handleError();
+      if (_hasChainLoading) {
+        HttpUtilSafeCall.closeChainLoading();
+      }
+      return null;
+    }
+    // 链路成功完成，关闭加载提示
+    if (_hasChainLoading) {
+      HttpUtilSafeCall.closeChainLoading();
+    }
+    final extractedValue = extractor(nextResponse);
+    return updater(extracted, extractedValue);
+  }
+
+  /// 获取提取的对象
+  M get value => extracted;
+
+  /// 获取响应
+  Response<R> get responseValue => response;
+}
+
+/// 提取后的对象链式调用扩展
+/// 支持在提取对象后继续链式调用，对象在链路中传递
+extension ExtractedValueExtension<M> on Future<M?> {
+  /// 链式调用：传递提取后的对象给下一个请求
+  /// 返回 ChainResult，对象在链路中传递
+  ///
+  /// 示例：
+  /// ```dart
+  /// final result = await http.send(...)
+  ///   .extractModel<FileUploadResult>(FileUploadResult.fromConfigJson)
+  ///   .thenWith((uploadResult) => http.send(
+  ///     method: hm.post,
+  ///     path: '/get-url',
+  ///     data: {'key': uploadResult.imageKey},
+  ///   ));
+  /// ```
+  Future<ChainResult<M, R>> thenWith<R>(
+    Future<Response<R>> Function(M extracted) nextRequest,
+  ) async {
+    final extracted = await this;
+    if (extracted == null) {
+      // 注意：这里无法创建 ChainResult，因为 extracted 为 null
+      // 检查是否有链式调用的加载提示，如果有则关闭
+      if (HttpUtilSafeCall.hasChainLoading()) {
+        HttpUtilSafeCall.closeChainLoading();
+      }
+      throw StateError('提取的对象为 null，无法继续链式调用');
+    }
+
+    // 检查是否已有链式调用的加载提示（由第一步的 isLoading: true 创建）
+    final hasChainLoading = HttpUtilSafeCall.hasChainLoading();
+
+    final response = await nextRequest(extracted);
+    return ChainResult<M, R>(
+      extracted: extracted,
+      response: response,
+      hasChainLoading: hasChainLoading,
+    );
+  }
+
+  /// 链式调用：传递提取后的对象给下一个请求，并提取最终结果
+  /// 如果任何一步失败，返回 null
+  ///
+  /// 示例：
+  /// ```dart
+  /// final imageUrl = await http.send(...)
+  ///   .extractModel<FileUploadResult>(FileUploadResult.fromConfigJson)
+  ///   .thenWithExtract<String>(
+  ///     (uploadResult) => http.send(
+  ///       method: hm.post,
+  ///       path: '/get-url',
+  ///       data: {'key': uploadResult.imageKey},
+  ///     ),
+  ///     (response) => response.extractField<String>('image_url'),
+  ///   );
+  /// ```
+  ///
+  /// **注意**：如果第一步设置了 `isLoading: true`，整个链路只显示一个加载提示
+  /// 在链路结束时（成功或失败）自动关闭
+  Future<R?> thenWithExtract<R>(
+    Future<Response<dynamic>> Function(M extracted) nextRequest,
+    R? Function(Response<dynamic> response) finalExtractor,
+  ) async {
+    final extracted = await this;
+    if (extracted == null) {
+      // 检查是否有链式调用的加载提示，如果有则关闭
+      if (HttpUtilSafeCall.hasChainLoading()) {
+        HttpUtilSafeCall.closeChainLoading();
+      }
+      return null;
+    }
+
+    // 检查是否已有链式调用的加载提示
+    final hasChainLoading = HttpUtilSafeCall.hasChainLoading();
+
+    final nextResponse = await nextRequest(extracted);
+    if (!nextResponse.isSuccess) {
+      // 失败时关闭加载提示
+      if (hasChainLoading) {
+        HttpUtilSafeCall.closeChainLoading();
+      }
+      return null;
+    }
+
+    // 成功时关闭加载提示
+    if (hasChainLoading) {
+      HttpUtilSafeCall.closeChainLoading();
+    }
+
+    return finalExtractor(nextResponse);
+  }
+}
+
+/// Future<ChainResult<M, R>> 扩展方法
+/// 支持在 ChainResult 的 Future 上继续链式调用
+extension FutureChainResultExtension<M, R> on Future<ChainResult<M, R>> {
+  /// 继续链式调用（中间步骤）
+  /// 等同于 await chainResult.thenWith(...)
+  Future<ChainResult<M, R2>> thenWith<R2>(
+    Future<Response<R2>> Function(M extracted, Response<R> prevResponse)
+        nextRequest,
+  ) async {
+    final chainResult = await this;
+    return await chainResult.thenWith<R2>(nextRequest);
+  }
+
+  /// 继续链式调用，传递提取的对象和响应，更新对象并返回（最后一步）
+  /// 等同于 await chainResult.thenWithUpdate(...)
+  ///
+  /// 示例：
+  /// ```dart
+  /// final result = await http.send(...)
+  ///   .extractModel<FileUploadResult>(FileUploadResult.fromConfigJson)
+  ///   .thenWith((uploadResult) => http.uploadToUrlResponse(...))
+  ///   .thenWithUpdate<String>(
+  ///     (uploadResult, uploadResponse) => http.send(...),
+  ///     (response) => response.extractField<String>('image_url'),
+  ///     (uploadResult, imageUrl) => uploadResult.copyWith(imageUrl: imageUrl),
+  ///   );
+  /// ```
+  Future<M?> thenWithUpdate<R2>(
+    Future<Response<dynamic>> Function(M extracted, Response<R> prevResponse)
+        nextRequest,
+    R2? Function(Response<dynamic> response) extractor,
+    M Function(M extracted, R2? extractedValue) updater,
+  ) async {
+    final chainResult = await this;
+    return await chainResult.thenWithUpdate<R2>(
+      nextRequest,
+      extractor,
+      updater,
+    );
   }
 }

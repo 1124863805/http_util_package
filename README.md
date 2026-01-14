@@ -215,6 +215,8 @@ final response = await http.send(
 );
 ```
 
+**注意：** 在链式调用中，只需在第一步设置 `isLoading: true`，整个链路会共享一个加载提示。详见 [链式调用中的加载提示管理](#链式调用中的加载提示管理)。
+
 ### 自定义加载提示 UI
 
 ```dart
@@ -254,7 +256,64 @@ final userName = await http.send(...).extractPath<String>('user.name');
 await http.send(...)
   .onSuccess(() => print('成功'))
   .onFailure((error) => print('失败: $error'));
+
+// 链式调用下一个请求（传递前一个响应）
+final result = await http.send(...)
+  .then((prevResponse) => http.send(
+    method: hm.post,
+    path: '/next-step',
+    data: {'token': prevResponse.extractField<String>('token')},
+  ));
+
+// 条件链式调用
+final result2 = await http.send(...)
+  .thenIf(
+    (prevResponse) => prevResponse.extractField<bool>('needNextStep') == true,
+    (prevResponse) => http.send(method: hm.post, path: '/next-step'),
+  );
 ```
+
+### 链式调用中的加载提示管理
+
+在链式调用中，如果第一步设置了 `isLoading: true`，整个链路只会显示**一个**加载提示，加载提示会在整个链路结束时（成功或失败）自动关闭。
+
+**使用方式：**
+
+```dart
+// 第一步设置 isLoading: true，整个链路共享一个加载提示
+final result = await http.send(
+  method: hm.post,
+  path: '/uploader/generate',
+  data: {'ext': 'jpg'},
+  isLoading: true, // 只在第一步设置，后续步骤自动继承
+)
+.extractModel<FileUploadResult>(FileUploadResult.fromConfigJson)
+.thenWith(
+  (uploadResult) => http.uploadToUrlResponse(
+    uploadUrl: uploadResult.uploadUrl,
+    file: file,
+    method: 'PUT',
+    // 不需要设置 isLoading，会自动复用第一步的加载提示
+  ),
+)
+.thenWithUpdate<String>(
+  (uploadResult, uploadResponse) => http.send(
+    method: hm.post,
+    path: '/uploader/get-image-url',
+    data: {'image_key': uploadResult.imageKey},
+    // 不需要设置 isLoading，会自动复用第一步的加载提示
+  ),
+  (response) => response.extractField<String>('image_url'),
+  (uploadResult, imageUrl) => uploadResult.copyWith(imageUrl: imageUrl),
+);
+// 整个链路结束时，加载提示自动关闭
+```
+
+**优势：**
+- ✅ 只需在第一步设置 `isLoading: true`
+- ✅ 后续步骤自动继承，无需重复设置
+- ✅ 整个链路只显示一个加载提示，避免闪烁
+- ✅ 链路结束时自动关闭，无需手动管理
 
 ## 自定义响应解析器
 
@@ -569,6 +628,21 @@ if (response is PagedResponse<User>) {
 - `Future<Response<T>>.extract<R>(extractor)` - 链式调用通用提取
 - `Future<Response<T>>.onSuccess(callback)` - 链式调用成功回调
 - `Future<Response<T>>.onFailure(callback)` - 链式调用失败回调
+- `Future<Response<T>>.then<R>(nextRequest)` - 链式调用下一个请求（传递前一个响应）
+- `Future<Response<T>>.thenIf<R>(condition, nextRequest)` - 条件链式调用
+
+**提取后的对象链式调用扩展：**
+- `Future<M?>.thenWith<R>(nextRequest)` - 传递提取的对象给下一个请求，返回 `ChainResult`
+- `Future<M?>.thenWithExtract<R>(nextRequest, finalExtractor)` - 传递提取的对象并提取最终结果
+
+**ChainResult 链式调用方法：**
+- `ChainResult<M, R>.thenWith<R2>(nextRequest)` - 继续链式调用（中间步骤），返回 `ChainResult`
+- `ChainResult<M, R>.thenWithUpdate<R2>(nextRequest, extractor, updater)` - 继续链式调用（最后一步），更新对象并返回
+- `ChainResult<M, R>.thenWithExtract<R2>(nextRequest, finalExtractor)` - 继续链式调用并提取最终结果
+
+**Future<ChainResult> 扩展方法：**
+- `Future<ChainResult<M, R>>.thenWith<R2>(nextRequest)` - 继续链式调用（中间步骤）
+- `Future<ChainResult<M, R>>.thenWithUpdate<R2>(nextRequest, extractor, updater)` - 继续链式调用（最后一步）
 
 ### ResponseParser
 
@@ -804,8 +878,8 @@ final uploadUrl = uploadInfo.extract<String>(
 );
 
 if (uploadUrl != null) {
-  // 2. 直接上传到 OSS（使用 PUT 方法）
-  final response = await http.uploadToUrl(
+  // 2. 直接上传到 OSS（使用 PUT 方法，支持链式调用）
+  final response = await http.uploadToUrlResponse(
     uploadUrl: uploadUrl,
     file: File('/path/to/image.jpg'),
     method: 'PUT',  // OSS 通常使用 PUT
@@ -818,15 +892,13 @@ if (uploadUrl != null) {
     },
   );
 
-  // 3. 检查上传结果
-  if (response.statusCode == 200 || response.statusCode == 204) {
+  // 3. 检查上传结果（自动处理错误提示）
+  if (response.isSuccess) {
     print('上传成功');
     // 可以获取文件访问 URL
     final fileUrl = uploadInfo.extract<String>(
       (data) => (data as Map<String, dynamic>)['fileUrl'] as String?,
     );
-  } else {
-    print('上传失败: ${response.statusCode}');
   }
 }
 ```
@@ -834,7 +906,7 @@ if (uploadUrl != null) {
 **示例（腾讯云 COS，使用 POST 表单上传）：**
 
 ```dart
-final response = await http.uploadToUrl(
+final response = await http.uploadToUrlResponse(
   uploadUrl: uploadUrl,
   file: File('/path/to/image.jpg'),
   method: 'POST',
@@ -845,20 +917,24 @@ final response = await http.uploadToUrl(
     print('上传进度: ${(sent / total * 100).toStringAsFixed(1)}%');
   },
 );
+
+if (response.isSuccess) {
+  print('上传成功');
+}
 ```
 
 **示例（使用文件路径或字节数组）：**
 
 ```dart
 // 使用文件路径
-final response1 = await http.uploadToUrl(
+final response1 = await http.uploadToUrlResponse(
   uploadUrl: uploadUrl,
   file: '/path/to/image.jpg',
   method: 'PUT',
 );
 
 // 使用字节数组
-final response2 = await http.uploadToUrl(
+final response2 = await http.uploadToUrlResponse(
   uploadUrl: uploadUrl,
   file: imageBytes,
   method: 'PUT',
@@ -866,7 +942,7 @@ final response2 = await http.uploadToUrl(
 );
 ```
 
-**uploadToUrl 参数说明：**
+**uploadToUrlResponse 参数说明：**
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
@@ -878,7 +954,9 @@ final response2 = await http.uploadToUrl(
 | `cancelToken` | `CancelToken?` | 取消令牌，用于取消上传操作 |
 
 **返回值：**
-- 返回 `Future<dio_package.Response>`，可以直接访问 `statusCode`、`data` 等属性
+- 返回 `Future<Response<T>>`，支持链式调用
+- 可以通过 `response.isSuccess` 检查是否成功
+- 失败时会自动触发错误提示（通过 `HttpConfig.onError`）
 
 **输入验证：**
 - 自动验证 `uploadUrl` 是否为有效的 URL 格式，无效时抛出 `ArgumentError`
@@ -886,9 +964,11 @@ final response2 = await http.uploadToUrl(
 - 自动检查文件是否存在（File 或 String 路径），不存在时抛出 `FileSystemException`
 
 **注意事项：**
-- `uploadToUrl` 不依赖 `baseUrl` 配置，直接使用完整 URL
+- `uploadToUrlResponse` 不依赖 `baseUrl` 配置，直接使用完整 URL
 - OSS 签名信息通常已经在 URL 中，一般不需要额外添加请求头
 - 上传成功后，OSS 通常返回 200 或 204 状态码
+- 上传失败时会自动触发错误提示（通过 `HttpConfig.onError`）
+- 支持链式调用，可以继续使用 `.thenWith()` 等方法
 - 如果需要获取文件访问 URL，通常需要从后端接口获取
 - 进度回调中的 `sent` 和 `total` 可能为 -1（未知大小），需要在回调中处理
 

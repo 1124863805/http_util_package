@@ -21,21 +21,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `Future<Response<T>>.extract<R>(extractor)` - 链式调用通用提取
   - `Future<Response<T>>.onSuccess(callback)` - 链式调用成功回调
   - `Future<Response<T>>.onFailure(callback)` - 链式调用失败回调
+  - `thenWith()` - 链式调用中间步骤，传递提取的对象和响应
+  - `thenWithUpdate()` - 链式调用最后一步，提取并更新对象
+  - `thenWithExtract()` - 链式调用并提取最终结果
 - **加载提示功能**
   - `isLoading` 参数：在 `send()` 方法中支持自动显示/隐藏加载提示
   - `contextGetter` 配置：在 `HttpConfig` 中配置 BuildContext 获取器
   - `loadingWidgetBuilder` 配置：支持自定义加载提示 UI
   - `DefaultLoadingWidget`：默认 iOS 风格加载提示组件
+  - **链式调用中的加载提示管理**：在链式调用中，只需在第一步设置 `isLoading: true`，整个链路共享一个加载提示，链路结束时自动关闭
 
 ### Features
 - 数据提取增强 - 提供多种简化方法，让数据提取更简单
 - 链式调用支持 - Future 扩展方法，支持流畅的链式调用
 - 自动加载提示 - 支持自动显示/隐藏加载提示，无需手动管理
+- 链式调用加载提示管理 - 整个链路只显示一个加载提示，自动管理生命周期
 
 ### 改进
 - 优化数据提取 API，提供更简洁的使用方式
 - 完善文档，添加所有新功能的使用示例
 - 改进代码结构，提取加载提示组件到独立文件
+- 优化链式调用中的加载提示管理，确保加载提示在整个链路结束时正确关闭
 
 ## [1.1.0] - 2026-01-14
 
@@ -47,7 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 支持上传进度回调
   - 支持额外表单数据
 - **OSS 直传支持**
-  - `uploadToUrl()` 方法：直接上传到外部 URL（阿里云 OSS、腾讯云 COS 等）
+  - `uploadToUrlResponse()` 方法：直接上传到外部 URL（阿里云 OSS、腾讯云 COS 等），支持链式调用
   - 支持 PUT 和 POST 方法
   - 支持自定义请求头
   - 不依赖 baseUrl 配置，直接使用完整 URL

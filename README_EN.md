@@ -216,6 +216,8 @@ final response = await http.send(
 );
 ```
 
+**Note:** In chain calls, you only need to set `isLoading: true` in the first step, and the entire chain will share one loading indicator. See [Loading Indicator Management in Chain Calls](#loading-indicator-management-in-chain-calls) for details.
+
 ### Custom Loading Indicator UI
 
 ```dart
@@ -255,6 +257,49 @@ final userName = await http.send(...).extractPath<String>('user.name');
 await http.send(...)
   .onSuccess(() => print('Success'))
   .onFailure((error) => print('Failed: $error'));
+```
+
+### Loading Indicator Management in Chain Calls
+
+In chain calls, if you set `isLoading: true` in the first step, the entire chain will display **only one** loading indicator. The loading indicator will automatically close when the entire chain completes (success or failure).
+
+**Usage:**
+
+```dart
+// Set isLoading: true in the first step, the entire chain shares one loading indicator
+final result = await http.send(
+  method: hm.post,
+  path: '/uploader/generate',
+  data: {'ext': 'jpg'},
+  isLoading: true, // Only set in the first step, subsequent steps automatically inherit
+)
+.extractModel<FileUploadResult>(FileUploadResult.fromConfigJson)
+.thenWith(
+  (uploadResult) => http.uploadToUrlResponse(
+    uploadUrl: uploadResult.uploadUrl,
+    file: file,
+    method: 'PUT',
+    // No need to set isLoading, automatically reuses the loading indicator from the first step
+  ),
+)
+.thenWithUpdate<String>(
+  (uploadResult, uploadResponse) => http.send(
+    method: hm.post,
+    path: '/uploader/get-image-url',
+    data: {'image_key': uploadResult.imageKey},
+    // No need to set isLoading, automatically reuses the loading indicator from the first step
+  ),
+  (response) => response.extractField<String>('image_url'),
+  (uploadResult, imageUrl) => uploadResult.copyWith(imageUrl: imageUrl),
+);
+// The loading indicator automatically closes when the entire chain completes
+```
+
+**Benefits:**
+- ✅ Only need to set `isLoading: true` in the first step
+- ✅ Subsequent steps automatically inherit, no need to repeat
+- ✅ Only one loading indicator for the entire chain, avoiding flickering
+- ✅ Automatically closes when the chain completes, no manual management needed
 ```
 
 ## Custom Response Parser
@@ -329,6 +374,21 @@ Response abstract class, all response classes must inherit this.
 - `Future<Response<T>>.extract<R>(extractor)` - Chain call general extract
 - `Future<Response<T>>.onSuccess(callback)` - Chain call success callback
 - `Future<Response<T>>.onFailure(callback)` - Chain call failure callback
+- `Future<Response<T>>.then<R>(nextRequest)` - Chain call to next request (pass previous response)
+- `Future<Response<T>>.thenIf<R>(condition, nextRequest)` - Conditional chain call
+
+**Extracted value chain call extensions:**
+- `Future<M?>.thenWith<R>(nextRequest)` - Pass extracted object to next request, returns `ChainResult`
+- `Future<M?>.thenWithExtract<R>(nextRequest, finalExtractor)` - Pass extracted object and extract final result
+
+**ChainResult chain call methods:**
+- `ChainResult<M, R>.thenWith<R2>(nextRequest)` - Continue chain call (intermediate step), returns `ChainResult`
+- `ChainResult<M, R>.thenWithUpdate<R2>(nextRequest, extractor, updater)` - Continue chain call (final step), update object and return
+- `ChainResult<M, R>.thenWithExtract<R2>(nextRequest, finalExtractor)` - Continue chain call and extract final result
+
+**Future<ChainResult> extension methods:**
+- `Future<ChainResult<M, R>>.thenWith<R2>(nextRequest)` - Continue chain call (intermediate step)
+- `Future<ChainResult<M, R>>.thenWithUpdate<R2>(nextRequest, extractor, updater)` - Continue chain call (final step)
 
 ### ResponseParser
 
