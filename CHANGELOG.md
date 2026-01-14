@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-01-15
+
+### Fixed
+- **修复单次请求的加载提示无法关闭问题**
+  - 修复了单次请求（非链式调用）时，加载提示无法自动关闭的 bug
+  - 单次请求现在会正确地在请求结束时关闭加载提示
+  - 链式调用的加载提示管理逻辑保持不变
+
+### 改进
+- 优化了 `send` 方法中加载提示的管理逻辑，区分单次请求和链式调用
+- 完善了代码注释，明确单次请求和链式调用的处理方式
+
 ## [1.2.0] - 2026-01-15
 
 ### Added
