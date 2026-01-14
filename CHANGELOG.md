@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.3] - 2026-01-15
+
+### Fixed
+- **修复 SSE POST 请求中文字符编码问题**
+  - 修复了 SSE POST 请求中包含中文字符时出现 "Invalid argument (string): Contains invalid characters" 错误的问题
+  - 现在使用 `utf8.encode()` 正确编码 JSON 字符串为字节后再写入请求体
+  - 支持在 POST 请求体中发送包含中文的 JSON 数据
+
+### Changed
+- **简化 SSE API，统一使用 sseManager()**
+  - 移除了 `sse()`, `sseClient()`, `sseConnection()`, `sseWithCallbacks()` 方法
+  - 现在只保留 `sseManager()` 方法作为唯一的 SSE API
+  - `sseManager()` 支持单连接和多连接场景，功能更强大
+  - 简化了 API 设计，降低了学习成本
+
+### 改进
+- 优化了 SSE 连接管理器的实现，直接使用 `SSEConnection.connect()` 建立连接
+- 更新了文档，移除了旧的 SSE 方法说明，只保留 `sseManager()` 的完整文档
+- 完善了多连接场景的使用示例
+
 ## [1.2.2] - 2026-01-15
 
 ### Fixed

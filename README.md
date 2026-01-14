@@ -28,7 +28,7 @@
 
 ```yaml
 dependencies:
-  dio_http_util: ^1.2.2
+  dio_http_util: ^1.2.3
 ```
 
 ## 快速开始
