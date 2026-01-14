@@ -7,6 +7,7 @@
 
 - 📦 [Pub.dev](https://pub.dev/packages/dio_http_util)
 - 🐙 [GitHub](https://github.com/1124863805/http_util_package)
+- 📖 [English Documentation](README_EN.md) | [中文文档](README.md)
 
 ## 特性
 
@@ -19,12 +20,15 @@
 - ✅ 文件上传支持 - 单文件、多文件上传，支持进度回调
 - ✅ OSS 直传支持 - 直接上传到对象存储（阿里云、腾讯云等），不经过后端服务器
 - ✅ Server-Sent Events (SSE) 支持 - 实时事件流处理
+- ✅ 数据提取增强 - 提供 `extractField`、`extractModel`、`extractList`、`extractPath` 等简化方法
+- ✅ 链式调用支持 - Future 扩展方法，支持流畅的链式调用
+- ✅ 自动加载提示 - 支持自动显示/隐藏加载提示，无需手动管理
 
 ## 安装
 
 ```yaml
 dependencies:
-  dio_http_util: ^1.1.0
+  dio_http_util: ^1.2.0
 ```
 
 ## 快速开始
@@ -72,9 +76,22 @@ final response = await http.send(
 );
 
 // 处理响应（错误已自动处理并提示，直接提取数据即可）
-final token = response.extract<String>(
+
+// 方式1：使用 extractField（最简单，推荐）
+final token = response.extractField<String>('token');
+
+// 方式2：使用 extract（通用方式，支持复杂逻辑）
+final token2 = response.extract<String>(
   (data) => (data as Map)['token'] as String?,
 );
+
+// 方式3：链式调用（推荐，无需中间变量）
+final token3 = await http.send(
+  method: hm.post,
+  path: '/auth/login',
+  data: {'email': 'user@example.com', 'code': '123456'},
+).extractField<String>('token');
+
 if (token != null) saveToken(token);
 ```
 
@@ -84,10 +101,160 @@ if (token != null) saveToken(token);
 - `data` - 请求体数据（可选）
 - `queryParameters` - URL 查询参数（可选）
 
+**send 方法新增参数：**
+- `isLoading` - 是否显示加载提示（默认 false），如果为 true 且配置了 `contextGetter`，将自动显示加载提示
+
 **说明：**
 - 如果响应失败（`isSuccess == false`），工具类会自动调用 `onError` 回调显示错误提示
 - `extract` 方法内部已检查 `isSuccess`，失败时返回 `null`
 - `onSuccess` 是可选的，仅用于让成功逻辑更清晰
+
+## 数据提取方法
+
+工具包提供了多种数据提取方法，让数据提取更简单：
+
+### 1. extractField - 提取字段（最简单）
+
+从 Map 中直接提取字段值，无需写 lambda 表达式：
+
+```dart
+// 同步使用
+final token = response.extractField<String>('token');
+final userId = response.extractField<int>('userId');
+
+// 链式调用（推荐）
+final token = await http.send(...).extractField<String>('token');
+```
+
+### 2. extractModel - 提取模型
+
+从 Map 转换为模型类，自动处理类型检查：
+
+```dart
+// 定义模型
+class User {
+  final String name;
+  final int age;
+  User({required this.name, required this.age});
+  factory User.fromJson(Map<String, dynamic> json) {
+    return User(name: json['name'], age: json['age']);
+  }
+}
+
+// 使用
+final user = response.extractModel<User>(User.fromJson);
+
+// 链式调用（推荐）
+final user = await http.send(...).extractModel<User>(User.fromJson);
+```
+
+### 3. extractList - 提取列表
+
+从 Map 中提取列表字段并转换为模型列表：
+
+```dart
+// 使用
+final users = response.extractList<User>('users', User.fromJson);
+
+// 链式调用（推荐）
+final users = await http.send(...).extractList<User>('users', User.fromJson);
+```
+
+### 4. extractPath - 提取嵌套字段
+
+支持路径提取，如 `user.name`：
+
+```dart
+// 使用
+final userName = response.extractPath<String>('user.name');
+final userId = response.extractPath<int>('user.profile.id');
+
+// 链式调用（推荐）
+final userName = await http.send(...).extractPath<String>('user.name');
+```
+
+### 5. extract - 通用提取（复杂场景）
+
+支持复杂的数据提取逻辑：
+
+```dart
+final complex = response.extract<CustomType>(
+  (data) => CustomType.fromComplexData(data),
+);
+```
+
+## 加载提示功能
+
+### 配置加载提示
+
+在初始化时配置 `contextGetter` 和可选的 `loadingWidgetBuilder`：
+
+```dart
+HttpUtil.configure(
+  HttpConfig(
+    baseUrl: 'https://api.example.com/v1',
+    // 配置 contextGetter（必需）
+    contextGetter: () => Get.context, // 或 navigatorKey.currentContext
+    // 可选：自定义加载提示 UI
+    loadingWidgetBuilder: (context) => MyCustomLoadingWidget(),
+  ),
+);
+```
+
+### 使用加载提示
+
+在请求时设置 `isLoading: true`：
+
+```dart
+// 自动显示/隐藏加载提示
+final response = await http.send(
+  method: hm.post,
+  path: '/auth/login',
+  data: {'email': 'user@example.com'},
+  isLoading: true, // 自动显示加载提示
+);
+```
+
+### 自定义加载提示 UI
+
+```dart
+HttpUtil.configure(
+  HttpConfig(
+    baseUrl: 'https://api.example.com/v1',
+    contextGetter: () => Get.context,
+    // 自定义加载提示 Widget
+    loadingWidgetBuilder: (context) => Container(
+      color: Colors.black54,
+      child: Center(
+        child: CircularProgressIndicator(),
+      ),
+    ),
+  ),
+);
+```
+
+## 链式调用
+
+所有提取方法都支持链式调用，无需中间变量：
+
+```dart
+// 提取字段
+final token = await http.send(...).extractField<String>('token');
+
+// 提取模型
+final user = await http.send(...).extractModel<User>(User.fromJson);
+
+// 提取列表
+final users = await http.send(...).extractList<User>('users', User.fromJson);
+
+// 提取嵌套字段
+final userName = await http.send(...).extractPath<String>('user.name');
+
+// 成功/失败回调
+await http.send(...)
+  .onSuccess(() => print('成功'))
+  .onFailure((error) => print('失败: $error'));
+```
 
 ## 自定义响应解析器
 
@@ -369,6 +536,8 @@ if (response is PagedResponse<User>) {
 | `logPrintBody` | `bool` | 是否打印 body（默认 true） |
 | `logMode` | `LogMode` | 日志模式：`complete`（推荐）、`realTime`、`brief` |
 | `logShowRequestHint` | `bool` | 是否在请求时显示简要提示（仅在 complete 模式下有效，默认 true） |
+| `contextGetter` | `BuildContext? Function()?` | Context 获取器（用于加载提示功能） |
+| `loadingWidgetBuilder` | `Widget Function(BuildContext)?` | 自定义加载提示 Widget 构建器（可选） |
 
 ### Response<T>
 
@@ -386,7 +555,20 @@ if (response is PagedResponse<User>) {
 - `onSuccess(callback)` - 成功时执行回调
 - `onFailure(callback)` - 失败时执行回调
 - `extract<R>(extractor)` - 提取并转换数据（仅在成功时执行）
+- `extractField<R>(key)` - 从 Map 提取字段（最简单的方式）
+- `extractModel<R>(fromJson)` - 从 Map 提取模型（类型安全）
+- `extractList<R>(key, fromJson)` - 从 Map 提取列表并转换为模型列表
+- `extractPath<R>(path)` - 从 Map 提取嵌套字段（支持路径，如 'user.name'）
 - `getData()` - 获取数据（类型安全，失败时返回 null）
+
+**Future 扩展方法（支持链式调用）：**
+- `Future<Response<T>>.extractField<R>(key)` - 链式调用提取字段
+- `Future<Response<T>>.extractModel<R>(fromJson)` - 链式调用提取模型
+- `Future<Response<T>>.extractList<R>(key, fromJson)` - 链式调用提取列表
+- `Future<Response<T>>.extractPath<R>(path)` - 链式调用提取嵌套字段
+- `Future<Response<T>>.extract<R>(extractor)` - 链式调用通用提取
+- `Future<Response<T>>.onSuccess(callback)` - 链式调用成功回调
+- `Future<Response<T>>.onFailure(callback)` - 链式调用失败回调
 
 ### ResponseParser
 

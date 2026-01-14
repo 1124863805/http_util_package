@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'response_parser.dart';
 import 'parsers/standard_response_parser.dart';
 
@@ -85,6 +86,35 @@ class HttpConfig {
   /// 如果为 true，请求时会打印一行简要信息，如 "→ POST /api/login"
   final bool logShowRequestHint;
 
+  /// Context 获取器（可选）
+  /// 如果提供，工具包会自动使用加载提示功能
+  /// 
+  /// 示例（使用 GetX）：
+  /// ```dart
+  /// contextGetter: () => Get.context
+  /// ```
+  /// 
+  /// 示例（使用 Navigator）：
+  /// ```dart
+  /// final navigatorKey = GlobalKey<NavigatorState>();
+  /// // 在 MaterialApp 中设置 navigatorKey: navigatorKey
+  /// contextGetter: () => navigatorKey.currentContext
+  /// ```
+  final BuildContext? Function()? contextGetter;
+
+  /// 自定义加载提示 Widget 构建器（可选）
+  /// 如果提供，将使用自定义的加载提示 UI
+  /// 如果不提供，将使用工具包内置的默认实现
+  /// 
+  /// [context] 由 contextGetter 获取的 BuildContext
+  /// 返回 Widget，工具包会将其显示在 Overlay 中
+  /// 
+  /// 示例：
+  /// ```dart
+  /// loadingWidgetBuilder: (context) => MyCustomLoadingWidget(),
+  /// ```
+  final Widget Function(BuildContext context)? loadingWidgetBuilder;
+
   HttpConfig({
     required this.baseUrl,
     ResponseParser? responseParser, // 可选参数，默认使用 StandardResponseParser
@@ -96,5 +126,7 @@ class HttpConfig {
     this.logPrintBody = true,
     this.logMode = LogMode.complete,
     this.logShowRequestHint = true,
+    this.contextGetter,
+    this.loadingWidgetBuilder,
   }) : responseParser = responseParser ?? StandardResponseParser();
 }

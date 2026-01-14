@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/material.dart';
 import 'package:dio/dio.dart' as dio_package;
 import 'http_config.dart';
 import 'response.dart';
@@ -10,6 +11,7 @@ import 'simple_error_response.dart';
 import 'upload_file.dart';
 import 'sse/sse_client.dart';
 import 'sse/sse_event.dart';
+import 'widgets/loading_widget.dart';
 
 /// HTTP 请求工具类
 /// 基于 Dio 封装，支持配置化的请求头注入
@@ -19,6 +21,9 @@ class HttpUtil {
   static HttpUtil? _instance;
   static dio_package.Dio? _dioInstance;
   static HttpConfig? _config;
+
+  /// 维护加载提示的映射（loadingId -> OverlayEntry）
+  static final Map<String, OverlayEntry> _loadingOverlays = {};
 
   /// 单例获取
   static HttpUtil get instance {
@@ -218,14 +223,80 @@ extension HttpUtilSafeCall on HttpUtil {
     return SimpleErrorResponse<T>(errorMessage);
   }
 
+  /// 显示加载提示
+  /// [context] BuildContext
+  /// [config] HttpConfig 配置
+  /// 返回加载提示的 ID（用于关闭时使用）
+  /// 如果无法找到 Overlay，返回 null（静默失败）
+  String? _showLoading(BuildContext context, HttpConfig config) {
+    try {
+      // 优先使用用户自定义的 Widget
+      Widget loadingWidget;
+      if (config.loadingWidgetBuilder != null) {
+        loadingWidget = config.loadingWidgetBuilder!(context);
+      } else {
+        // 使用默认实现
+        loadingWidget = const DefaultLoadingWidget();
+      }
+
+      final overlayEntry = OverlayEntry(
+        builder: (context) => loadingWidget,
+      );
+
+      // 通过 Navigator 查找根 Overlay
+      final navigator = Navigator.of(context, rootNavigator: true);
+      final overlay = navigator.overlay;
+
+      if (overlay == null) {
+        throw StateError('无法找到 Overlay');
+      }
+
+      overlay.insert(overlayEntry);
+
+      final loadingId = overlayEntry.hashCode.toString();
+      HttpUtil._loadingOverlays[loadingId] = overlayEntry;
+
+      return loadingId;
+    } catch (e) {
+      // 如果找不到 Overlay（例如应用还未完全初始化），静默失败
+      // 不显示加载提示，但不影响请求的正常执行
+      return null;
+    }
+  }
+
+  /// 隐藏加载提示
+  /// [loadingId] 由 _showLoading 返回的 ID
+  void _hideLoading(String? loadingId) {
+    if (loadingId != null) {
+      final overlayEntry = HttpUtil._loadingOverlays.remove(loadingId);
+      overlayEntry?.remove();
+    }
+  }
+
   /// 发送请求（自动处理异常，失败时自动提示）
   /// [method] 请求方式：必须使用 hm.get、hm.post 等常量
+  /// [isLoading] 是否显示加载提示（默认 false）
+  /// 如果为 true 且配置了 contextGetter，将自动显示加载提示
   Future<Response<T>> send<T>({
     required String method,
     required String path,
     dynamic data,
     Map<String, dynamic>? queryParameters,
+    bool isLoading = false,
   }) async {
+    String? loadingId;
+
+    // 如果需要显示加载提示
+    if (isLoading) {
+      final config = _config;
+      if (config?.contextGetter != null) {
+        final context = config!.contextGetter!();
+        if (context != null) {
+          loadingId = _showLoading(context, config);
+        }
+      }
+    }
+
     try {
       // 直接调用 request 方法获取原始 response
       final rawResponse = await HttpUtil.instance.request<T>(
@@ -263,6 +334,11 @@ extension HttpUtilSafeCall on HttpUtil {
     } catch (e) {
       // 所有异常都统一处理为网络错误
       return _handleNetworkError<T>();
+    } finally {
+      // 确保关闭加载提示
+      if (isLoading && loadingId != null) {
+        _hideLoading(loadingId);
+      }
     }
   }
 }

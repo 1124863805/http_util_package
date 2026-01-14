@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-01-15
+
+### Added
+- **数据提取增强功能**
+  - `extractField<R>(key)` - 从 Map 中提取字段（最简单的方式）
+  - `extractModel<R>(fromJson)` - 从 Map 提取模型（类型安全）
+  - `extractList<R>(key, fromJson)` - 从 Map 提取列表并转换为模型列表
+  - `extractPath<R>(path)` - 从 Map 提取嵌套字段（支持路径，如 'user.name'）
+- **Future 扩展方法（链式调用支持）**
+  - `Future<Response<T>>.extractField<R>(key)` - 链式调用提取字段
+  - `Future<Response<T>>.extractModel<R>(fromJson)` - 链式调用提取模型
+  - `Future<Response<T>>.extractList<R>(key, fromJson)` - 链式调用提取列表
+  - `Future<Response<T>>.extractPath<R>(path)` - 链式调用提取嵌套字段
+  - `Future<Response<T>>.extract<R>(extractor)` - 链式调用通用提取
+  - `Future<Response<T>>.onSuccess(callback)` - 链式调用成功回调
+  - `Future<Response<T>>.onFailure(callback)` - 链式调用失败回调
+- **加载提示功能**
+  - `isLoading` 参数：在 `send()` 方法中支持自动显示/隐藏加载提示
+  - `contextGetter` 配置：在 `HttpConfig` 中配置 BuildContext 获取器
+  - `loadingWidgetBuilder` 配置：支持自定义加载提示 UI
+  - `DefaultLoadingWidget`：默认 iOS 风格加载提示组件
+
+### Features
+- 数据提取增强 - 提供多种简化方法，让数据提取更简单
+- 链式调用支持 - Future 扩展方法，支持流畅的链式调用
+- 自动加载提示 - 支持自动显示/隐藏加载提示，无需手动管理
+
+### 改进
+- 优化数据提取 API，提供更简洁的使用方式
+- 完善文档，添加所有新功能的使用示例
+- 改进代码结构，提取加载提示组件到独立文件
+
 ## [1.1.0] - 2026-01-14
 
 ### Added
