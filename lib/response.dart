@@ -231,7 +231,23 @@ extension FutureResponseExtension<T> on Future<Response<T>> {
   /// ```
   Future<R?> extractField<R>(String key) async {
     final response = await this;
-    return response.extractField<R>(key);
+    final result = response.extractField<R>(key);
+    // 如果这是单次请求（没有后续链式调用），且设置了 isLoading: true
+    // 需要在提取完成后关闭 loading（因为 finally 块中 isChainCall = true 不会关闭）
+    // 通过检查是否有链式调用的 loading 来判断
+    // 如果 _chainLoadingId 存在且没有被后续链式调用使用，说明这是单次请求
+    // 注意：这里使用微任务延迟检查，确保链式调用有机会设置状态
+    if (HttpUtilSafeCall.hasChainLoading()) {
+      // 延迟检查：如果是单次请求，会在微任务中关闭 loading
+      Future.microtask(() {
+        // 如果链式调用的 loading 仍然存在，说明没有后续链式调用（单次请求）
+        // 需要关闭 loading
+        if (HttpUtilSafeCall.hasChainLoading()) {
+          HttpUtilSafeCall.closeChainLoading();
+        }
+      });
+    }
+    return result;
   }
 
   /// 等待响应完成后，自动提取列表

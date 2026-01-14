@@ -334,10 +334,14 @@ extension HttpUtilSafeCall on HttpUtil {
             loadingId = HttpUtil._chainLoadingId;
             isChainCall = true;
           } else {
-            // 单次请求：创建新的加载提示，不标记为链式调用
+            // 创建新的加载提示（可能是链式调用的第一步，也可能是单次请求）
+            // 先创建 loading，设置 _chainLoadingId，标记为链式调用
+            // 如果是单次请求，会在 finally 块中关闭并清理 _chainLoadingId
             loadingId = _showLoading(context, config);
-            // 注意：单次请求不设置 _chainLoadingId，也不设置 isChainCall = true
-            // 这样 finally 块中会正确关闭加载提示
+            if (loadingId != null) {
+              HttpUtil._chainLoadingId = loadingId;
+              isChainCall = true;
+            }
           }
         }
       }
@@ -381,10 +385,14 @@ extension HttpUtilSafeCall on HttpUtil {
       // 所有异常都统一处理为网络错误
       return _handleNetworkError<T>();
     } finally {
-      // 如果不是链式调用，立即关闭加载提示
+      // 如果不是链式调用，立即关闭加载提示并清理 _chainLoadingId
       // 如果是链式调用，加载提示会在整个链路结束时关闭
       if (isLoading && loadingId != null && !isChainCall) {
         _hideLoading(loadingId);
+        // 清理 _chainLoadingId（如果是单次请求，确保清理）
+        if (HttpUtil._chainLoadingId == loadingId) {
+          HttpUtil._chainLoadingId = null;
+        }
       }
     }
   }
