@@ -86,6 +86,12 @@ class MineView extends GetView<MineController> {
     final menuItems = [
       _MenuItem(
         icon: Icons.shopping_bag,
+        titleKey: "demo测算页面",
+        onTap: controller.goToDemo,
+        color: Colors.orange,
+      ),
+      _MenuItem(
+        icon: Icons.shopping_bag,
         titleKey: LocaleKeys.my_orders,
         onTap: controller.goToMyOrders,
         color: Colors.orange,

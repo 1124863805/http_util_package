@@ -41,4 +41,9 @@ class MineController extends GetxController {
   void goToFeedback() {
     Get.toNamed(Routes.FEEDBACK);
   }
+
+  /// 跳转到demo测算页面
+  void goToDemo() {
+    Get.toNamed(Routes.DEMO);
+  }
 }

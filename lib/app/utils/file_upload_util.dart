@@ -184,11 +184,11 @@ class FileUploadUtil {
       final fileType = type ?? _inferType(fileExt);
 
       // 获取 OSS 配置 → 上传到 OSS → 获取图片 URL → 更新对象（完整链路，一套调用）
-      return await http
+      // 使用 http.isLoading.send() 明确标记为链式调用，整个链路共享一个 loading
+      return await http.isLoading
           .send(
             method: hm.post,
             path: '/uploader/generate',
-            isLoading: true,
             data: {'ext': fileExt, 'type': fileType},
           )
           .extractModel<FileUploadResult>(FileUploadResult.fromConfigJson)
