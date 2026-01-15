@@ -819,6 +819,129 @@ final response = await http.send(
 );
 ```
 
+## Server-Sent Events (SSE)
+
+### Basic Usage
+
+Use `sseManager()` to create a connection manager, supporting both single and multiple connection scenarios.
+
+**Single Connection Scenario:**
+```dart
+import 'package:dio_http_util/http_util.dart';
+
+final manager = http.sseManager();
+
+// Establish connection
+await manager.connect(
+  id: 'chat',
+  path: '/ai/chat/stream',
+  method: 'POST',
+  data: {'question': 'Hello'},
+  headers: {'X-Custom-Header': 'value'},  // Request-specific headers (optional)
+  onData: (event) {
+    print('Received event: ${event.data}');
+  },
+  onError: (error) {
+    print('SSE error: $error');
+  },
+  onDone: () {
+    print('SSE connection closed');
+  },
+);
+
+// Disconnect
+await manager.disconnect('chat');
+```
+
+**Multiple Connection Scenario:**
+```dart
+final manager = http.sseManager();
+
+// Establish first connection
+await manager.connect(
+  id: 'chat',
+  path: '/ai/chat/stream',
+  method: 'POST',
+  data: {'question': 'Hello'},
+  headers: {'X-Chat-Type': 'ai'},  // Request-specific headers (optional)
+  onData: (event) => print('Chat: ${event.data}'),
+);
+
+// Establish second connection
+await manager.connect(
+  id: 'notifications',
+  path: '/notifications/stream',
+  headers: {'X-Notification-Type': 'push'},  // Request-specific headers (optional)
+  onData: (event) => print('Notification: ${event.data}'),
+);
+
+// Disconnect specific connection
+await manager.disconnect('chat');
+
+// Disconnect all connections
+await manager.disconnectAll();
+
+// Wait for all connections to complete
+await manager.waitForAllConnectionsDone();
+print('All connections completed');
+```
+
+### Wait for All Connections to Complete
+
+When you have multiple SSE connections, you can use `waitForAllConnectionsDone()` to wait until all connections are completed:
+
+```dart
+final manager = http.sseManager();
+
+// Establish multiple connections
+await manager.connect(id: 'chat1', path: '/stream1', ...);
+await manager.connect(id: 'chat2', path: '/stream2', ...);
+await manager.connect(id: 'chat3', path: '/stream3', ...);
+
+// Wait for all connections to complete (resolves when all connections' onDone callbacks are called)
+await manager.waitForAllConnectionsDone();
+print('All connections completed');
+```
+
+**Notes:**
+- `waitForAllConnectionsDone()` only waits for connections that exist when this method is called
+- If new connections are added after calling this method, they won't be waited for
+- Returns immediately if all connections are already disconnected
+
+### SSE Manager API
+
+| Method/Property | Type | Description |
+|----------------|------|-------------|
+| `connect()` | `Future<String>` | Establish SSE connection, returns connection ID |
+| `disconnect(id)` | `Future<void>` | Disconnect specific connection |
+| `disconnectAll()` | `Future<void>` | Disconnect all connections |
+| `hasConnection(id)` | `bool` | Check if connection exists |
+| `isConnected(id)` | `bool` | Check if connection is connected |
+| `connectionIds` | `List<String>` | Get all connection IDs |
+| `connectionCount` | `int` | Get connection count |
+| `waitForAllConnectionsDone()` | `Future<void>` | Wait for all connections to complete (resolves when all connections' `onDone` callbacks are called) |
+| `dispose()` | `Future<void>` | Clean up all resources (equivalent to `disconnectAll()`) |
+
+**Parameter Description:**
+- `id` - Connection unique identifier (required), used to manage multiple connections
+- `path` - Request path (required)
+- `method` - HTTP method, default 'GET', supports 'GET' and 'POST'
+- `data` - Request body data (used for POST requests, automatically converted to JSON)
+- `queryParameters` - URL query parameters (optional)
+- `baseUrl` - Directly specify baseUrl (optional, highest priority)
+- `service` - Use service name defined in `serviceBaseUrls` (optional)
+- `onData` - Data callback (required)
+- `onError` - Error callback (optional)
+- `onDone` - Done callback (optional)
+- `replaceIfExists` - Whether to replace if connection already exists (default true)
+
+**Notes:**
+- SSE connections automatically use configured headers (static and dynamic)
+- After connection is established, server will continuously push events
+- Resources are automatically cleaned up on connection failure, no manual handling needed
+- Call `disconnectAll()` in Controller's `onClose` to automatically clean up all connections
+- Supports maintaining multiple connections simultaneously, each with a unique ID
+
 ## Custom Response Parser
 
 ### Simple Custom Parser

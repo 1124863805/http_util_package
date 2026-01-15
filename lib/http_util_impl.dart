@@ -1501,6 +1501,10 @@ class _SSEManagerImpl extends SSEManager {
       }
     }
 
+    // 确保连接的 Completer 存在（在连接建立前创建）
+    // 这样即使连接在 waitForAllConnectionsDone() 调用前完成，也能正确跟踪
+    ensureConnectionCompleter(id);
+
     // 获取配置
     final config = HttpUtilSafeCall._config;
     if (config == null) {
@@ -1522,11 +1526,16 @@ class _SSEManagerImpl extends SSEManager {
       headers: headers,
     );
 
-    // 监听事件
+    // 监听事件（包装 onDone 回调，在完成后标记连接完成）
     connection.listen(
       onData: onData,
       onError: onError,
-      onDone: onDone,
+      onDone: () {
+        // 先调用用户提供的 onDone 回调
+        onDone?.call();
+        // 然后标记连接完成
+        markConnectionDone(id);
+      },
     );
 
     // 保存连接对象
@@ -1535,6 +1544,8 @@ class _SSEManagerImpl extends SSEManager {
     // 创建取消函数
     addCancelFunction(id, () async {
       await connection.disconnect();
+      // 断开连接时也标记完成
+      markConnectionDone(id);
     });
 
     return id;

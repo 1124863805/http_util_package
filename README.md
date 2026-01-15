@@ -1581,6 +1581,10 @@ await manager.disconnect('chat');
 
 // 断开所有连接
 await manager.disconnectAll();
+
+// 等待所有连接完成
+await manager.waitForAllConnectionsDone();
+print('所有连接都已完成');
 ```
 
 ### 完整示例：实时聊天页面
@@ -1683,6 +1687,7 @@ class SSEEvent {
 | `isConnected(id)` | `bool` | 检查连接是否已连接 |
 | `connectionIds` | `List<String>` | 获取所有连接 ID |
 | `connectionCount` | `int` | 获取连接数量 |
+| `waitForAllConnectionsDone()` | `Future<void>` | 等待所有连接完成（当所有连接的 `onDone` 被调用时 resolve） |
 | `dispose()` | `Future<void>` | 清理所有资源（等同于 `disconnectAll()`） |
 
 **参数说明：**

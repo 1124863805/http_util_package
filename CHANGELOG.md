@@ -15,10 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 自动为不同 baseUrl 创建和缓存独立的 Dio 实例，复用拦截器配置
   - 文件上传、文件下载、SSE 等功能均支持多服务
   - 请求去重逻辑已更新，基于完整 URL（包含 baseUrl）进行去重
+- **SSE 多连接完成跟踪**
+  - 新增 `waitForAllConnectionsDone()` 方法，支持等待所有 SSE 连接完成
+  - 自动跟踪每个连接的完成状态，当所有连接的 `onDone` 回调被调用时 resolve
+  - 支持在多个连接场景下统一处理所有连接的完成事件
 
 ### 改进
 - 优化了 Dio 实例管理，为不同 baseUrl 自动创建独立实例
-- 更新了文档，添加了多服务支持的完整说明和示例
+- 优化了 SSE 连接管理，支持跟踪和等待所有连接完成
+- 更新了文档，添加了多服务支持和 SSE 多连接完成跟踪的完整说明和示例
 - 完善了 API 文档，添加了 `serviceBaseUrls` 和相关参数的说明
 
 ## [1.4.0] - 2026-01-15

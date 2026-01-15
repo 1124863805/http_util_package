@@ -7,6 +7,8 @@ import 'sse_event.dart';
 class SSEManager {
   final Map<String, SSEConnection> _connections = {};
   final Map<String, Future<void> Function()> _cancelFunctions = {};
+  // 跟踪每个连接的完成状态
+  final Map<String, Completer<void>> _connectionCompleters = {};
 
   /// 获取所有连接 ID
   List<String> get connectionIds => _connections.keys.toList();
@@ -84,6 +86,12 @@ class SSEManager {
       }
     }
 
+    // 为连接创建 Completer（用于跟踪完成状态）
+    // 必须在连接建立前创建，这样即使连接在 waitForAllConnectionsDone() 调用前完成也能正确跟踪
+    if (!_connectionCompleters.containsKey(id)) {
+      _connectionCompleters[id] = Completer<void>();
+    }
+
     // 子类需要实现此方法
     throw UnimplementedError('请使用 http.sseManager() 创建管理器');
   }
@@ -98,6 +106,10 @@ class SSEManager {
     if (connection != null) {
       await connection.disconnect();
     }
+    // 标记连接完成（如果还在等待列表中）
+    markConnectionDone(id);
+    // 清理 Completer（延迟清理，确保 waitForAllConnectionsDone() 能正确等待）
+    // 注意：这里不立即清理，让 waitForAllConnectionsDone() 有机会完成
   }
 
   /// 断开所有连接
@@ -124,8 +136,105 @@ class SSEManager {
     _cancelFunctions.remove(id);
   }
 
+  /// 确保连接的 Completer 存在（内部使用，子类可访问）
+  /// 如果 Completer 不存在，创建一个新的
+  void ensureConnectionCompleter(String id) {
+    if (!_connectionCompleters.containsKey(id)) {
+      _connectionCompleters[id] = Completer<void>();
+    }
+  }
+
   /// 清理所有资源
   Future<void> dispose() async {
     await disconnectAll();
+  }
+
+  /// 等待所有连接完成
+  ///
+  /// 返回一个 Future，当所有当前存在的连接都完成（onDone 被调用）时 resolve
+  ///
+  /// 注意：
+  /// - 只等待调用此方法时已存在的连接
+  /// - 如果在此方法调用后新增了连接，不会等待新连接
+  /// - 如果所有连接都已断开，立即返回
+  ///
+  /// 示例：
+  /// ```dart
+  /// final manager = http.sseManager();
+  ///
+  /// // 建立多个连接
+  /// await manager.connect(id: 'chat1', ...);
+  /// await manager.connect(id: 'chat2', ...);
+  /// await manager.connect(id: 'chat3', ...);
+  ///
+  /// // 等待所有连接完成
+  /// await manager.waitForAllConnectionsDone();
+  /// print('所有连接都已完成');
+  /// ```
+  Future<void> waitForAllConnectionsDone() async {
+    // 如果没有连接，立即返回
+    if (_connections.isEmpty) {
+      return;
+    }
+
+    // 获取当前所有连接的 ID（快照，避免在等待过程中连接变化）
+    final connectionIds = _connections.keys.toList();
+
+    // 为每个连接创建 Completer（如果还没有）
+    // 注意：正常情况下，Completer 应该在 connect() 时创建
+    // 这里只是防御性处理，确保每个连接都有 Completer
+    for (final id in connectionIds) {
+      if (!_connectionCompleters.containsKey(id)) {
+        // 如果 Completer 不存在，创建一个新的
+        // 注意：如果连接已经完成，markConnectionDone 应该已经创建并完成了 Completer
+        // 但为了防御性处理，这里也创建一个（如果连接已完成，会在 Future.wait() 中立即返回）
+        _connectionCompleters[id] = Completer<void>();
+      }
+    }
+
+    try {
+      // 等待所有连接完成
+      await Future.wait(
+        connectionIds.map((id) {
+          final completer = _connectionCompleters[id];
+          if (completer == null) {
+            // 防御性处理：如果 Completer 不存在，返回已完成的 Future
+            return Future<void>.value();
+          }
+          return completer.future;
+        }),
+      );
+    } finally {
+      // 等待完成后，清理这些连接的 Completer
+      _cleanupConnectionCompleters(connectionIds);
+    }
+  }
+
+  /// 标记连接完成（内部使用，子类可访问）
+  void markConnectionDone(String id) {
+    var completer = _connectionCompleters[id];
+
+    // 如果 Completer 不存在，创建一个并立即完成它
+    // 这样即使 waitForAllConnectionsDone() 在连接完成后才调用，也能正确等待
+    if (completer == null) {
+      completer = Completer<void>();
+      completer.complete();
+      _connectionCompleters[id] = completer;
+      return;
+    }
+
+    // Completer 已存在，如果未完成则完成它
+    if (!completer.isCompleted) {
+      completer.complete();
+    }
+    // 注意：不立即移除 Completer，保留它直到 waitForAllConnectionsDone() 完成
+    // 这样即使 waitForAllConnectionsDone() 在连接完成后才调用，也能正确等待
+  }
+
+  /// 清理连接的 Completer（内部使用，在 waitForAllConnectionsDone() 完成后调用）
+  void _cleanupConnectionCompleters(List<String> connectionIds) {
+    for (final id in connectionIds) {
+      _connectionCompleters.remove(id);
+    }
   }
 }
