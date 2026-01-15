@@ -29,6 +29,7 @@ class LoginController extends GetxController {
         .send(
           method: hm.post,
           path: '/auth/verify/email',
+          isLoading: true,
           data: {"email": emailController.text.trim()},
         )
         .onSuccess(_startCountdown);
