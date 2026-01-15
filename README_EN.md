@@ -1072,16 +1072,21 @@ Response abstract class, all response classes must inherit this.
 - `Future<Response<T>>.thenIf<R>(condition, nextRequest)` - Conditional chain call
 
 **Extracted value chain call extensions:**
-- `Future<M?>.thenWith<R>(nextRequest)` - Pass extracted object to next request, returns `ChainResult`
+- `Future<M?>.thenWith<R>(nextRequest, {extractor?, updater?})` - Pass extracted object to next request, returns `ChainResult`
+  - Supports optional parameters `extractor` and `updater` to update object in intermediate steps and continue chain call
+  - `nextRequest` receives only one parameter `(extracted)`
 - `Future<M?>.thenWithExtract<R>(nextRequest, finalExtractor)` - Pass extracted object and extract final result
 
 **ChainResult chain call methods:**
-- `ChainResult<M, R>.thenWith<R2>(nextRequest)` - Continue chain call (intermediate step), returns `ChainResult`
+- `ChainResult<M, R>.thenWith<R2>(nextRequest, {extractor?, updater?})` - Continue chain call (intermediate step), returns `ChainResult`
+  - Supports optional parameters `extractor` and `updater` to update object in intermediate steps and continue chain call
+  - `nextRequest` receives two parameters `(extracted, prevResponse)`
 - `ChainResult<M, R>.thenWithUpdate<R2>(nextRequest, extractor, updater)` - Continue chain call (final step), update object and return
 - `ChainResult<M, R>.thenWithExtract<R2>(nextRequest, finalExtractor)` - Continue chain call and extract final result
 
 **Future<ChainResult> extension methods:**
-- `Future<ChainResult<M, R>>.thenWith<R2>(nextRequest)` - Continue chain call (intermediate step)
+- `Future<ChainResult<M, R>>.thenWith<R2>(nextRequest, {extractor?, updater?})` - Continue chain call (intermediate step)
+  - Supports optional parameters `extractor` and `updater` to update object in intermediate steps and continue chain call
 - `Future<ChainResult<M, R>>.thenWithUpdate<R2>(nextRequest, extractor, updater)` - Continue chain call (final step)
 
 ### ResponseParser

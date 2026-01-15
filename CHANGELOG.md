@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.4] - 2026-01-15
+
+### 改进
+- **简化链式调用 API，降低学习成本**
+  - 删除了 `thenWithUpdateAndContinue` 方法，统一使用 `thenWith` 方法
+  - `thenWith` 方法现在支持可选参数 `extractor` 和 `updater`，可以在中间步骤更新对象并继续链式调用
+  - 方法数量从 3 个减少到 2 个：`thenWith`（中间步骤）和 `thenWithUpdate`（最后一步）
+  - 明确了两种使用场景：
+    - `ExtractedValueExtension.thenWith`：从 `extractModel` 等扩展方法调用，只接收一个参数 `(extracted)`
+    - `ChainResult.thenWith`：从 `ChainResult` 调用，接收两个参数 `(extracted, prevResponse)`
+  - 两种方法都支持可选参数更新对象，API 更加统一和简洁
+
+### 修复
+- **修复 API 文档与实际使用不一致的问题**
+  - 更新了 `ExtractedValueExtension.thenWith` 的文档，明确说明只接收一个参数
+  - 更新了 `ChainResult.thenWith` 的文档，明确说明接收两个参数
+  - 统一了两种方法的可选参数支持，确保文档和代码实现一致
+
 ## [1.4.3] - 2026-01-15
 
 ### 新增

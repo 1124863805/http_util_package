@@ -463,6 +463,23 @@ final result2 = await http.send(...)
     (prevResponse) => prevResponse.extractField<bool>('needNextStep') == true,
     (prevResponse) => http.send(method: hm.post, path: '/next-step'),
   );
+
+// 链式调用：中间步骤更新对象并继续链式调用
+// 使用 thenWith 的可选参数 extractor 和 updater
+final result3 = await http.isLoading
+  .send(...)
+  .extractModel<FileUploadResult>(FileUploadResult.fromConfigJson)
+  .thenWith(
+    (uploadResult) => http.send(
+      method: hm.post,
+      path: '/get-image-url',
+      data: {'image_key': uploadResult.imageKey},
+    ),
+    // 可选参数：在中间步骤更新对象
+    extractor: (response) => response.extractField<String>('image_url'),
+    updater: (uploadResult, imageUrl) => uploadResult.copyWith(imageUrl: imageUrl),
+  )
+  .thenWith((updatedUploadResult, prevResponse) => http.send(...)); // 可以继续链式调用
 ```
 
 ### 链式调用中的加载提示管理
@@ -859,16 +876,21 @@ if (response is PagedResponse<User>) {
 - `Future<Response<T>>.thenIf<R>(condition, nextRequest)` - 条件链式调用
 
 **提取后的对象链式调用扩展：**
-- `Future<M?>.thenWith<R>(nextRequest)` - 传递提取的对象给下一个请求，返回 `ChainResult`
+- `Future<M?>.thenWith<R>(nextRequest, {extractor?, updater?})` - 传递提取的对象给下一个请求，返回 `ChainResult`
+  - 支持可选参数 `extractor` 和 `updater`，可以在中间步骤更新对象并继续链式调用
+  - `nextRequest` 只接收一个参数 `(extracted)`
 - `Future<M?>.thenWithExtract<R>(nextRequest, finalExtractor)` - 传递提取的对象并提取最终结果
 
 **ChainResult 链式调用方法：**
-- `ChainResult<M, R>.thenWith<R2>(nextRequest)` - 继续链式调用（中间步骤），返回 `ChainResult`
+- `ChainResult<M, R>.thenWith<R2>(nextRequest, {extractor?, updater?})` - 继续链式调用（中间步骤），返回 `ChainResult`
+  - 支持可选参数 `extractor` 和 `updater`，可以在中间步骤更新对象并继续链式调用
+  - `nextRequest` 接收两个参数 `(extracted, prevResponse)`
 - `ChainResult<M, R>.thenWithUpdate<R2>(nextRequest, extractor, updater)` - 继续链式调用（最后一步），更新对象并返回
 - `ChainResult<M, R>.thenWithExtract<R2>(nextRequest, finalExtractor)` - 继续链式调用并提取最终结果
 
 **Future<ChainResult> 扩展方法：**
-- `Future<ChainResult<M, R>>.thenWith<R2>(nextRequest)` - 继续链式调用（中间步骤）
+- `Future<ChainResult<M, R>>.thenWith<R2>(nextRequest, {extractor?, updater?})` - 继续链式调用（中间步骤）
+  - 支持可选参数 `extractor` 和 `updater`，可以在中间步骤更新对象并继续链式调用
 - `Future<ChainResult<M, R>>.thenWithUpdate<R2>(nextRequest, extractor, updater)` - 继续链式调用（最后一步）
 
 ### ResponseParser
