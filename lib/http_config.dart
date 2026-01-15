@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'response_parser.dart';
 import 'parsers/standard_response_parser.dart';
+import 'request_deduplicator.dart';
 
 /// 日志打印模式
 enum LogMode {
@@ -88,12 +89,12 @@ class HttpConfig {
 
   /// Context 获取器（可选）
   /// 如果提供，工具包会自动使用加载提示功能
-  /// 
+  ///
   /// 示例（使用 GetX）：
   /// ```dart
   /// contextGetter: () => Get.context
   /// ```
-  /// 
+  ///
   /// 示例（使用 Navigator）：
   /// ```dart
   /// final navigatorKey = GlobalKey<NavigatorState>();
@@ -105,15 +106,39 @@ class HttpConfig {
   /// 自定义加载提示 Widget 构建器（可选）
   /// 如果提供，将使用自定义的加载提示 UI
   /// 如果不提供，将使用工具包内置的默认实现
-  /// 
+  ///
   /// [context] 由 contextGetter 获取的 BuildContext
   /// 返回 Widget，工具包会将其显示在 Overlay 中
-  /// 
+  ///
   /// 示例：
   /// ```dart
   /// loadingWidgetBuilder: (context) => MyCustomLoadingWidget(),
   /// ```
   final Widget Function(BuildContext context)? loadingWidgetBuilder;
+
+  /// 请求去重/防抖配置（可选）
+  /// 如果提供，将启用请求去重/防抖功能
+  ///
+  /// 示例：
+  /// ```dart
+  /// deduplicationConfig: DeduplicationConfig(
+  ///   mode: DeduplicationMode.deduplication,
+  ///   debounceDelay: Duration(milliseconds: 300),
+  /// ),
+  /// ```
+  final DeduplicationConfig? deduplicationConfig;
+
+  /// 请求队列配置（可选）
+  /// 如果提供，将启用请求队列管理功能
+  ///
+  /// 示例：
+  /// ```dart
+  /// queueConfig: QueueConfig(
+  ///   maxConcurrency: 5,
+  ///   enabled: true,
+  /// ),
+  /// ```
+  final QueueConfig? queueConfig;
 
   HttpConfig({
     required this.baseUrl,
@@ -128,5 +153,39 @@ class HttpConfig {
     this.logShowRequestHint = true,
     this.contextGetter,
     this.loadingWidgetBuilder,
+    this.deduplicationConfig,
+    this.queueConfig,
   }) : responseParser = responseParser ?? StandardResponseParser();
+}
+
+/// 请求去重/防抖配置
+class DeduplicationConfig {
+  /// 去重模式
+  final DeduplicationMode mode;
+
+  /// 防抖延迟时间（仅在 debounce 模式下有效）
+  final Duration debounceDelay;
+
+  /// 节流间隔时间（仅在 throttle 模式下有效）
+  final Duration throttleInterval;
+
+  DeduplicationConfig({
+    this.mode = DeduplicationMode.deduplication,
+    this.debounceDelay = const Duration(milliseconds: 300),
+    this.throttleInterval = const Duration(milliseconds: 300),
+  });
+}
+
+/// 请求队列配置
+class QueueConfig {
+  /// 最大并发数（默认 10）
+  final int maxConcurrency;
+
+  /// 是否启用队列（默认 true）
+  final bool enabled;
+
+  QueueConfig({
+    this.maxConcurrency = 10,
+    this.enabled = true,
+  });
 }

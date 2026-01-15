@@ -15,6 +15,8 @@ import 'sse/sse_event.dart';
 import 'sse/sse_connection.dart';
 import 'sse/sse_manager.dart';
 import 'widgets/loading_widget.dart';
+import 'request_deduplicator.dart';
+import 'request_queue.dart';
 
 /// HTTP 请求工具类
 /// 基于 Dio 封装，支持配置化的请求头注入
@@ -31,6 +33,15 @@ class HttpUtil {
   /// 链式调用的加载提示 ID（用于整个链路共享一个加载提示）
   static String? _chainLoadingId;
 
+  /// 请求去重/防抖管理器
+  static RequestDeduplicator? _deduplicator;
+
+  /// 请求队列管理器
+  static RequestQueue? _requestQueue;
+
+  /// 获取请求队列管理器（如果已配置）
+  static RequestQueue? get requestQueue => _requestQueue;
+
   /// 单例获取
   static HttpUtil get instance {
     _instance ??= HttpUtil._();
@@ -42,6 +53,26 @@ class HttpUtil {
     _config = config;
     // 重置 Dio 实例，以便应用新配置
     _dioInstance = null;
+
+    // 初始化请求去重/防抖管理器
+    if (config.deduplicationConfig != null) {
+      _deduplicator = RequestDeduplicator(
+        mode: config.deduplicationConfig!.mode,
+        debounceDelay: config.deduplicationConfig!.debounceDelay,
+        throttleInterval: config.deduplicationConfig!.throttleInterval,
+      );
+    } else {
+      _deduplicator = null;
+    }
+
+    // 初始化请求队列管理器
+    if (config.queueConfig != null && config.queueConfig!.enabled) {
+      _requestQueue = RequestQueue(
+        maxConcurrency: config.queueConfig!.maxConcurrency,
+      );
+    } else {
+      _requestQueue = null;
+    }
   }
 
   /// 获取 Dio 实例（公开访问，方便特殊处理）
@@ -345,90 +376,131 @@ extension HttpUtilSafeCall on HttpUtil {
     Map<String, dynamic>? queryParameters,
     bool isLoading = false,
     Map<String, String>? headers,
+    int priority = 0,
+    bool skipDeduplication = false,
+    bool skipQueue = false,
   }) async {
-    String? loadingId;
-    bool isChainCall = false;
+    // 实际执行请求的函数
+    Future<Response<T>> executeRequest() async {
+      String? loadingId;
+      bool isChainCall = false;
 
-    // 如果需要显示加载提示
-    if (isLoading) {
-      final config = _config;
-      if (config?.contextGetter != null) {
-        final context = config!.contextGetter!();
-        if (context != null) {
-          // 检查是否已有链式调用的加载提示
-          if (HttpUtil._chainLoadingId != null) {
-            // 链式调用中已有加载提示，复用现有的
-            loadingId = HttpUtil._chainLoadingId;
-            isChainCall = true;
-          } else {
-            // 创建新的加载提示（可能是链式调用的第一步，也可能是单次请求）
-            // 先创建 loading，设置 _chainLoadingId，标记为链式调用
-            // 如果是单次请求，会在 finally 块中关闭并清理 _chainLoadingId
-            loadingId = _showLoading(context, config);
-            if (loadingId != null) {
-              HttpUtil._chainLoadingId = loadingId;
+      // 如果需要显示加载提示
+      if (isLoading) {
+        final config = _config;
+        if (config?.contextGetter != null) {
+          final context = config!.contextGetter!();
+          if (context != null) {
+            // 检查是否已有链式调用的加载提示
+            if (HttpUtil._chainLoadingId != null) {
+              // 链式调用中已有加载提示，复用现有的
+              loadingId = HttpUtil._chainLoadingId;
               isChainCall = true;
+            } else {
+              // 创建新的加载提示（可能是链式调用的第一步，也可能是单次请求）
+              // 先创建 loading，设置 _chainLoadingId，标记为链式调用
+              // 如果是单次请求，会在 finally 块中关闭并清理 _chainLoadingId
+              loadingId = _showLoading(context, config);
+              if (loadingId != null) {
+                HttpUtil._chainLoadingId = loadingId;
+                isChainCall = true;
+              }
             }
+          }
+        }
+      }
+
+      try {
+        // 构建请求选项，包含特定请求头
+        dio_package.Options? options;
+        if (headers != null && headers.isNotEmpty) {
+          options = dio_package.Options(headers: headers);
+        }
+
+        // 直接调用 request 方法获取原始 response
+        final rawResponse = await HttpUtil.instance.request<T>(
+          method: method,
+          path: path,
+          data: data,
+          queryParameters: queryParameters,
+          options: options,
+        );
+
+        // 检查 500 错误
+        if (rawResponse.statusCode == 500) {
+          return _handleNetworkError<T>();
+        }
+
+        // 使用用户配置的解析器解析响应
+        final config = _config;
+        if (config == null) {
+          throw StateError('HttpUtil 未配置，请先调用 HttpUtil.configure() 进行配置');
+        }
+
+        final response = config.responseParser.parse<T>(rawResponse);
+
+        // 自动处理错误（如果用户实现了 handleError 方法）
+        if (!response.isSuccess) {
+          response.handleError();
+
+          // 如果用户没有实现 handleError，使用配置的 onError 回调
+          final errorMessage = response.errorMessage;
+          if (errorMessage != null && config.onError != null) {
+            config.onError!(errorMessage);
+          }
+        }
+
+        return response;
+      } catch (e) {
+        // 所有异常都统一处理为网络错误
+        return _handleNetworkError<T>();
+      } finally {
+        // 如果不是链式调用，立即关闭加载提示并清理 _chainLoadingId
+        // 如果是链式调用，加载提示会在整个链路结束时关闭
+        if (isLoading && loadingId != null && !isChainCall) {
+          _hideLoading(loadingId);
+          // 清理 _chainLoadingId（如果是单次请求，确保清理）
+          if (HttpUtil._chainLoadingId == loadingId) {
+            HttpUtil._chainLoadingId = null;
           }
         }
       }
     }
 
-    try {
-      // 构建请求选项，包含特定请求头
-      dio_package.Options? options;
-      if (headers != null && headers.isNotEmpty) {
-        options = dio_package.Options(headers: headers);
-      }
+    // 如果启用了队列且未跳过队列，加入队列
+    if (HttpUtil._requestQueue != null && !skipQueue) {
+      return HttpUtil._requestQueue!.enqueue<Response<T>>(
+        priority: priority,
+        requestExecutor: () {
+          // 如果启用了去重且未跳过去重，使用去重管理器
+          if (HttpUtil._deduplicator != null && !skipDeduplication) {
+            return HttpUtil._deduplicator!.execute<Response<T>>(
+              method: method,
+              path: path,
+              queryParameters: queryParameters,
+              data: data,
+              requestExecutor: executeRequest,
+            );
+          } else {
+            return executeRequest();
+          }
+        },
+      );
+    }
 
-      // 直接调用 request 方法获取原始 response
-      final rawResponse = await HttpUtil.instance.request<T>(
+    // 如果启用了去重且未跳过去重，使用去重管理器
+    if (HttpUtil._deduplicator != null && !skipDeduplication) {
+      return HttpUtil._deduplicator!.execute<Response<T>>(
         method: method,
         path: path,
-        data: data,
         queryParameters: queryParameters,
-        options: options,
+        data: data,
+        requestExecutor: executeRequest,
       );
-
-      // 检查 500 错误
-      if (rawResponse.statusCode == 500) {
-        return _handleNetworkError<T>();
-      }
-
-      // 使用用户配置的解析器解析响应
-      final config = _config;
-      if (config == null) {
-        throw StateError('HttpUtil 未配置，请先调用 HttpUtil.configure() 进行配置');
-      }
-
-      final response = config.responseParser.parse<T>(rawResponse);
-
-      // 自动处理错误（如果用户实现了 handleError 方法）
-      if (!response.isSuccess) {
-        response.handleError();
-
-        // 如果用户没有实现 handleError，使用配置的 onError 回调
-        final errorMessage = response.errorMessage;
-        if (errorMessage != null && config.onError != null) {
-          config.onError!(errorMessage);
-        }
-      }
-
-      return response;
-    } catch (e) {
-      // 所有异常都统一处理为网络错误
-      return _handleNetworkError<T>();
-    } finally {
-      // 如果不是链式调用，立即关闭加载提示并清理 _chainLoadingId
-      // 如果是链式调用，加载提示会在整个链路结束时关闭
-      if (isLoading && loadingId != null && !isChainCall) {
-        _hideLoading(loadingId);
-        // 清理 _chainLoadingId（如果是单次请求，确保清理）
-        if (HttpUtil._chainLoadingId == loadingId) {
-          HttpUtil._chainLoadingId = null;
-        }
-      }
     }
+
+    // 直接执行请求
+    return executeRequest();
   }
 }
 
@@ -1040,7 +1112,6 @@ extension HttpUtilFileDownload on HttpUtil {
             await sink.flush();
           } catch (e) {
             // 写入文件时出错，关闭流并删除不完整的文件
-            await sink.close();
             if (deleteOnError && await file.exists()) {
               await file.delete();
             }
@@ -1080,7 +1151,6 @@ extension HttpUtilFileDownload on HttpUtil {
             await sink.flush();
           } catch (e) {
             // 写入文件时出错，关闭流并删除不完整的文件
-            await sink.close();
             if (deleteOnError && await file.exists()) {
               await file.delete();
             }

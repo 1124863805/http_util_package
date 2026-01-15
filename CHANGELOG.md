@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-01-15
+
+### Added
+- **请求去重/防抖功能**
+  - 新增 `RequestDeduplicator` 类，支持请求去重、防抖、节流三种模式
+  - 支持在 `HttpConfig` 中配置 `deduplicationConfig` 来启用去重/防抖功能
+  - 支持 `skipDeduplication` 参数，可以跳过去重直接执行请求
+  - 去重模式：相同请求共享同一个 Future，避免重复请求
+  - 防抖模式：延迟执行，如果在延迟期间有新请求，取消旧请求，执行新请求
+  - 节流模式：在指定时间内只执行一次
+- **请求队列管理功能**
+  - 新增 `RequestQueue` 类，支持请求队列、优先级、并发数限制
+  - 支持在 `HttpConfig` 中配置 `queueConfig` 来启用队列管理
+  - 支持 `priority` 参数，设置请求优先级（数字越大优先级越高）
+  - 支持 `skipQueue` 参数，可以跳过队列直接执行请求
+  - 支持队列状态监听（`statusStream`）
+  - 支持暂停/恢复队列、清空队列
+  - 新增 `HttpUtil.requestQueue` getter，获取队列管理器实例
+
+### 改进
+- 优化了请求执行流程，支持去重和队列的组合使用
+- 更新了文档，添加了请求去重和队列管理的完整说明和示例
+- 完善了 API 文档，添加了新参数的说明
+
 ## [1.3.0] - 2026-01-15
 
 ### Added

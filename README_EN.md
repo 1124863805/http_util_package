@@ -24,12 +24,14 @@ A powerful HTTP utility package based on Dio with configurable header injection 
 - ✅ Enhanced data extraction methods - simplified data extraction API
 - ✅ Chain call support - Future extension methods for fluent chaining
 - ✅ Automatic loading indicator - support automatic show/hide loading indicator
+- ✅ Request deduplication/debouncing - prevent duplicate concurrent requests, supports deduplication, debounce, and throttle modes
+- ✅ Request queue management - support request queue, priority, and concurrency limits
 
 ## Installation
 
 ```yaml
 dependencies:
-  dio_http_util: ^1.3.0
+  dio_http_util: ^1.4.0
 ```
 
 ## Quick Start
@@ -106,6 +108,9 @@ if (token != null) saveToken(token);
 - `queryParameters` - URL query parameters (optional)
 - `isLoading` - Whether to show loading indicator (default false)
 - `headers` - Request-specific headers (optional), will be merged with global headers, and will override global headers if keys are the same
+- `priority` - Request priority (default 0), only effective when queue is enabled, higher number = higher priority
+- `skipQueue` - Whether to skip queue (default false), if true, will execute directly even if queue is enabled
+- `skipDeduplication` - Whether to skip deduplication (default false), if true, will execute directly even if deduplication is enabled
 
 **Header priority (from low to high):**
 1. Static headers (`staticHeaders`) - lowest priority
@@ -498,6 +503,200 @@ final response = await http.downloadFile(
 - For large file downloads, it's recommended to enable resume download to avoid re-downloading on network interruption
 - The save path must include the filename, not just the directory path
 
+## Request Deduplication/Debouncing
+
+### Overview
+
+Request deduplication/debouncing prevents duplicate concurrent requests from being sent multiple times. It supports three modes:
+
+- **Deduplication Mode**: Same requests share the same Future, avoiding duplicate requests
+- **Debounce Mode**: Delays execution, if a new request comes during the delay, cancels the old request and executes the new one
+- **Throttle Mode**: Executes only once within a specified time interval
+
+### Configuration
+
+Configure deduplication/debouncing during initialization:
+
+```dart
+HttpUtil.configure(
+  HttpConfig(
+    baseUrl: 'https://api.example.com/v1',
+    // Configure request deduplication/debouncing
+    deduplicationConfig: DeduplicationConfig(
+      mode: DeduplicationMode.deduplication, // Deduplication mode
+      debounceDelay: Duration(milliseconds: 300), // Debounce delay (only effective in debounce mode)
+      throttleInterval: Duration(milliseconds: 300), // Throttle interval (only effective in throttle mode)
+    ),
+  ),
+);
+```
+
+### Usage Examples
+
+**Deduplication Mode** (Recommended):
+```dart
+// Configuration
+deduplicationConfig: DeduplicationConfig(
+  mode: DeduplicationMode.deduplication,
+),
+
+// Usage: Same requests are automatically deduplicated
+final response1 = http.send(method: hm.get, path: '/api/data');
+final response2 = http.send(method: hm.get, path: '/api/data'); // Will reuse response1's Future
+```
+
+**Debounce Mode**:
+```dart
+// Configuration
+deduplicationConfig: DeduplicationConfig(
+  mode: DeduplicationMode.debounce,
+  debounceDelay: Duration(milliseconds: 500),
+),
+
+// Usage: When called rapidly in succession, only the last call is executed
+// Example: When user types search keywords rapidly, only the last request is sent
+```
+
+**Throttle Mode**:
+```dart
+// Configuration
+deduplicationConfig: DeduplicationConfig(
+  mode: DeduplicationMode.throttle,
+  throttleInterval: Duration(seconds: 1),
+),
+
+// Usage: Executes only once within the specified time interval
+// Example: Prevents users from clicking buttons too frequently
+```
+
+**Skip Deduplication**:
+```dart
+// Some requests need to be sent forcefully, even if identical
+final response = await http.send(
+  method: hm.post,
+  path: '/api/refresh',
+  skipDeduplication: true, // Skip deduplication
+);
+```
+
+## Request Queue Management
+
+### Overview
+
+Request queue management controls the execution order and concurrency of requests, supporting:
+
+- **Priority Queue**: Higher priority requests execute first
+- **Concurrency Limit**: Limits the number of concurrent requests
+- **Queue Control**: Supports pause/resume queue, clear queue
+
+### Configuration
+
+Configure request queue during initialization:
+
+```dart
+HttpUtil.configure(
+  HttpConfig(
+    baseUrl: 'https://api.example.com/v1',
+    // Configure request queue
+    queueConfig: QueueConfig(
+      enabled: true, // Enable queue
+      maxConcurrency: 5, // Max concurrency (default 10)
+    ),
+  ),
+);
+```
+
+### Usage Examples
+
+**Basic Usage**:
+```dart
+// After configuring queue, all requests automatically enter the queue
+final response = await http.send(
+  method: hm.get,
+  path: '/api/data',
+  priority: 10, // Set priority (higher number = higher priority, default 0)
+);
+```
+
+**Priority Example**:
+```dart
+// High priority request (executes first)
+final urgentResponse = await http.send(
+  method: hm.post,
+  path: '/api/urgent',
+  priority: 100,
+);
+
+// Normal priority request
+final normalResponse = await http.send(
+  method: hm.get,
+  path: '/api/normal',
+  priority: 0, // Default priority
+);
+```
+
+**Skip Queue**:
+```dart
+// Urgent request, skip queue and execute directly
+final urgentResponse = await http.send(
+  method: hm.post,
+  path: '/api/emergency',
+  skipQueue: true, // Skip queue
+);
+```
+
+**Queue Status Monitoring**:
+```dart
+// Get queue manager (requires queueConfig to be configured first)
+final queue = HttpUtil.requestQueue;
+if (queue != null) {
+  // Monitor queue status
+  queue.statusStream.listen((status) {
+    print('Queue length: ${status.queueLength}');
+    print('Running: ${status.runningCount}');
+    print('Paused: ${status.isPaused}');
+  });
+  
+  // Pause queue
+  queue.pause();
+  
+  // Resume queue
+  queue.resume();
+  
+  // Clear queue
+  queue.clear();
+}
+```
+
+### Combined Usage
+
+Request deduplication and queue management can be used together:
+
+```dart
+HttpUtil.configure(
+  HttpConfig(
+    baseUrl: 'https://api.example.com/v1',
+    // Enable both deduplication and queue
+    deduplicationConfig: DeduplicationConfig(
+      mode: DeduplicationMode.deduplication,
+    ),
+    queueConfig: QueueConfig(
+      enabled: true,
+      maxConcurrency: 5,
+    ),
+  ),
+);
+
+// Usage: Requests first enter the queue, then deduplication is applied within the queue
+final response = await http.send(
+  method: hm.get,
+  path: '/api/data',
+  priority: 10,
+  // skipQueue: true, // Can skip queue
+  // skipDeduplication: true, // Can skip deduplication
+);
+```
+
 ## Custom Response Parser
 
 ### Simple Custom Parser
@@ -539,6 +738,8 @@ class CustomResponseParser implements ResponseParser {
 | `logShowRequestHint` | `bool` | Whether to show brief hint on request (only effective in complete mode, default true) |
 | `contextGetter` | `BuildContext? Function()?` | Context getter (for loading indicator feature) |
 | `loadingWidgetBuilder` | `Widget Function(BuildContext)?` | Custom loading indicator Widget builder (optional) |
+| `deduplicationConfig` | `DeduplicationConfig?` | Request deduplication/debouncing configuration (optional) |
+| `queueConfig` | `QueueConfig?` | Request queue configuration (optional) |
 
 ### Response<T>
 
@@ -604,6 +805,42 @@ hm.post
 hm.put
 hm.delete
 hm.patch
+```
+
+### Get Dio Instance
+
+```dart
+// Get configured instance
+final dio = HttpUtil.dio;
+
+// Create independent instance (optional parameters)
+final customDio = HttpUtil.createDio(
+  baseUrl: 'https://other-api.com',
+  connectTimeout: Duration(seconds: 10),
+  receiveTimeout: Duration(seconds: 10),
+  sendTimeout: Duration(seconds: 10),
+);
+```
+
+### Get Request Queue Manager
+
+```dart
+// Get request queue manager (if queueConfig is configured)
+final queue = HttpUtil.requestQueue;
+if (queue != null) {
+  // Monitor queue status
+  queue.statusStream.listen((status) {
+    print('Queue length: ${status.queueLength}');
+    print('Running: ${status.runningCount}');
+  });
+  
+  // Pause/resume queue
+  queue.pause();
+  queue.resume();
+  
+  // Clear queue
+  queue.clear();
+}
 ```
 
 ## License

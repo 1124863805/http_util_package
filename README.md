@@ -24,12 +24,14 @@
 - ✅ 数据提取增强 - 提供 `extractField`、`extractModel`、`extractList`、`extractPath` 等简化方法
 - ✅ 链式调用支持 - Future 扩展方法，支持流畅的链式调用
 - ✅ 自动加载提示 - 支持自动显示/隐藏加载提示，无需手动管理
+- ✅ 请求去重/防抖 - 防止相同请求并发发送，支持去重、防抖、节流三种模式
+- ✅ 请求队列管理 - 支持请求队列、优先级、并发数限制
 
 ## 安装
 
 ```yaml
 dependencies:
-  dio_http_util: ^1.3.0
+  dio_http_util: ^1.4.0
 ```
 
 ## 快速开始
@@ -104,6 +106,9 @@ if (token != null) saveToken(token);
 - `queryParameters` - URL 查询参数（可选）
 - `isLoading` - 是否显示加载提示（默认 false），如果为 true 且配置了 `contextGetter`，将自动显示加载提示
 - `headers` - 特定请求的请求头（可选），会与全局请求头合并，如果键相同则覆盖全局请求头
+- `priority` - 请求优先级（默认 0），仅在启用队列时有效，数字越大优先级越高
+- `skipQueue` - 是否跳过队列（默认 false），如果为 true，即使启用了队列也会直接执行
+- `skipDeduplication` - 是否跳过去重（默认 false），如果为 true，即使启用了去重也会直接执行
 
 **请求头优先级（从低到高）：**
 1. 静态请求头（`staticHeaders`）- 优先级最低
@@ -637,6 +642,8 @@ if (response is PagedResponse<User>) {
 | `logShowRequestHint` | `bool` | 是否在请求时显示简要提示（仅在 complete 模式下有效，默认 true） |
 | `contextGetter` | `BuildContext? Function()?` | Context 获取器（用于加载提示功能） |
 | `loadingWidgetBuilder` | `Widget Function(BuildContext)?` | 自定义加载提示 Widget 构建器（可选） |
+| `deduplicationConfig` | `DeduplicationConfig?` | 请求去重/防抖配置（可选） |
+| `queueConfig` | `QueueConfig?` | 请求队列配置（可选） |
 
 ### Response<T>
 
@@ -730,6 +737,27 @@ final customDio = HttpUtil.createDio(
   receiveTimeout: Duration(seconds: 10),
   sendTimeout: Duration(seconds: 10),
 );
+```
+
+### 获取请求队列管理器
+
+```dart
+// 获取请求队列管理器（如果已配置 queueConfig）
+final queue = HttpUtil.requestQueue;
+if (queue != null) {
+  // 监听队列状态
+  queue.statusStream.listen((status) {
+    print('队列长度: ${status.queueLength}');
+    print('正在执行: ${status.runningCount}');
+  });
+  
+  // 暂停/恢复队列
+  queue.pause();
+  queue.resume();
+  
+  // 清空队列
+  queue.clear();
+}
 ```
 
 ## 文件上传
@@ -1169,6 +1197,200 @@ final response = await http.downloadFile(
 - 进度回调中的 `total` 可能为 -1（未知大小），需要在回调中处理
 - 下载大文件时建议启用断点续传，避免网络中断导致重新下载
 - 下载的文件路径必须包含文件名，不能只是目录路径
+
+## 请求去重/防抖
+
+### 功能说明
+
+请求去重/防抖功能可以防止相同请求并发发送多次，支持三种模式：
+
+- **去重模式 (deduplication)**：相同请求共享同一个 Future，避免重复请求
+- **防抖模式 (debounce)**：延迟执行，如果在延迟期间有新请求，取消旧请求，执行新请求
+- **节流模式 (throttle)**：在指定时间内只执行一次
+
+### 配置
+
+在初始化时配置去重/防抖：
+
+```dart
+HttpUtil.configure(
+  HttpConfig(
+    baseUrl: 'https://api.example.com/v1',
+    // 配置请求去重/防抖
+    deduplicationConfig: DeduplicationConfig(
+      mode: DeduplicationMode.deduplication, // 去重模式
+      debounceDelay: Duration(milliseconds: 300), // 防抖延迟（仅在 debounce 模式下有效）
+      throttleInterval: Duration(milliseconds: 300), // 节流间隔（仅在 throttle 模式下有效）
+    ),
+  ),
+);
+```
+
+### 使用示例
+
+**去重模式**（推荐）：
+```dart
+// 配置
+deduplicationConfig: DeduplicationConfig(
+  mode: DeduplicationMode.deduplication,
+),
+
+// 使用：相同请求会自动去重
+final response1 = http.send(method: hm.get, path: '/api/data');
+final response2 = http.send(method: hm.get, path: '/api/data'); // 会复用 response1 的 Future
+```
+
+**防抖模式**：
+```dart
+// 配置
+deduplicationConfig: DeduplicationConfig(
+  mode: DeduplicationMode.debounce,
+  debounceDelay: Duration(milliseconds: 500),
+),
+
+// 使用：快速连续调用时，只执行最后一次
+// 例如：用户快速输入搜索关键词时，只发送最后一次请求
+```
+
+**节流模式**：
+```dart
+// 配置
+deduplicationConfig: DeduplicationConfig(
+  mode: DeduplicationMode.throttle,
+  throttleInterval: Duration(seconds: 1),
+),
+
+// 使用：在指定时间内只执行一次
+// 例如：防止用户频繁点击按钮
+```
+
+**跳过去重**：
+```dart
+// 某些请求需要强制发送，即使相同
+final response = await http.send(
+  method: hm.post,
+  path: '/api/refresh',
+  skipDeduplication: true, // 跳过去重
+);
+```
+
+## 请求队列管理
+
+### 功能说明
+
+请求队列管理功能可以控制请求的执行顺序和并发数，支持：
+
+- **优先级队列**：优先级高的请求先执行
+- **并发数限制**：限制同时执行的请求数量
+- **队列控制**：支持暂停/恢复队列、清空队列
+
+### 配置
+
+在初始化时配置请求队列：
+
+```dart
+HttpUtil.configure(
+  HttpConfig(
+    baseUrl: 'https://api.example.com/v1',
+    // 配置请求队列
+    queueConfig: QueueConfig(
+      enabled: true, // 启用队列
+      maxConcurrency: 5, // 最大并发数（默认 10）
+    ),
+  ),
+);
+```
+
+### 使用示例
+
+**基本使用**：
+```dart
+// 配置队列后，所有请求会自动进入队列
+final response = await http.send(
+  method: hm.get,
+  path: '/api/data',
+  priority: 10, // 设置优先级（数字越大优先级越高，默认 0）
+);
+```
+
+**优先级示例**：
+```dart
+// 高优先级请求（会优先执行）
+final urgentResponse = await http.send(
+  method: hm.post,
+  path: '/api/urgent',
+  priority: 100,
+);
+
+// 普通优先级请求
+final normalResponse = await http.send(
+  method: hm.get,
+  path: '/api/normal',
+  priority: 0, // 默认优先级
+);
+```
+
+**跳过队列**：
+```dart
+// 紧急请求，跳过队列直接执行
+final urgentResponse = await http.send(
+  method: hm.post,
+  path: '/api/emergency',
+  skipQueue: true, // 跳过队列
+);
+```
+
+**队列状态监听**：
+```dart
+// 获取队列管理器（需要先配置 queueConfig）
+final queue = HttpUtil.requestQueue;
+if (queue != null) {
+  // 监听队列状态
+  queue.statusStream.listen((status) {
+    print('队列长度: ${status.queueLength}');
+    print('正在执行: ${status.runningCount}');
+    print('是否暂停: ${status.isPaused}');
+  });
+  
+  // 暂停队列
+  queue.pause();
+  
+  // 恢复队列
+  queue.resume();
+  
+  // 清空队列
+  queue.clear();
+}
+```
+
+### 组合使用
+
+请求去重和队列管理可以同时使用：
+
+```dart
+HttpUtil.configure(
+  HttpConfig(
+    baseUrl: 'https://api.example.com/v1',
+    // 同时启用去重和队列
+    deduplicationConfig: DeduplicationConfig(
+      mode: DeduplicationMode.deduplication,
+    ),
+    queueConfig: QueueConfig(
+      enabled: true,
+      maxConcurrency: 5,
+    ),
+  ),
+);
+
+// 使用：请求会先进入队列，队列内再去重
+final response = await http.send(
+  method: hm.get,
+  path: '/api/data',
+  priority: 10,
+  // skipQueue: true, // 可以跳过队列
+  // skipDeduplication: true, // 可以跳过去重
+);
+```
 
 ## Server-Sent Events (SSE)
 
