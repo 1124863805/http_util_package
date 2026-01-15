@@ -55,6 +55,6 @@ class DownloadResponse<T> extends Response<T> {
   @override
   void handleError() {
     // 下载失败时，可以在这里实现自定义错误处理
-    // 默认实现为空，由 HttpConfig.onError 处理
+    // 默认实现为空，由 HttpConfig.onFailure 处理
   }
 }

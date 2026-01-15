@@ -33,8 +33,26 @@ abstract class Response<T> {
   /// 错误消息（如果失败）
   String? get errorMessage;
 
+  /// 错误码（如果失败，业务错误码）
+  /// 默认返回 null，用户可以在自己的响应类中重写此方法返回具体的错误码
+  int? get errorCode => null;
+
+  /// HTTP 状态码（如 200, 404, 500 等）
+  /// 默认返回 null，用户可以在自己的响应类中重写此方法返回 HTTP 状态码
+  int? get httpStatusCode => null;
+
   /// 数据（如果成功）
   T? get data;
+
+  /// 错误是否已被处理（通过链式调用的 onFailure 回调）
+  /// 如果为 true，表示错误已经通过链式调用的 onFailure 回调处理，不应该再调用全局的 onFailure
+  bool get errorHandled => _errorHandled;
+  bool _errorHandled = false;
+
+  /// 标记错误已处理（内部使用）
+  void _markErrorHandled() {
+    _errorHandled = true;
+  }
 
   /// 处理错误（可选实现，工具类会调用此方法）
   /// 默认实现为空，用户可以在自己的响应类中重写
@@ -49,9 +67,18 @@ abstract class Response<T> {
 
   /// 失败时执行回调
   /// 返回自身，支持链式调用
-  Response<T> onFailure(Function(String) callback) {
+  /// 注意：如果调用了此方法，错误将被标记为已处理，全局的 onFailure 不会再被调用
+  ///
+  /// 回调参数：
+  /// - [httpStatusCode] HTTP 状态码（如 200, 404, 500 等，可能为 null）
+  /// - [errorCode] 业务错误码（可能为 null）
+  /// - [message] 错误消息
+  Response<T> onFailure(
+      void Function(int? httpStatusCode, int? errorCode, String message)
+          callback) {
     if (!isSuccess && errorMessage != null) {
-      callback(errorMessage!);
+      callback(httpStatusCode, errorCode, errorMessage!);
+      _markErrorHandled(); // 标记错误已处理
     }
     return this;
   }
@@ -293,9 +320,18 @@ extension FutureResponseExtension<T> on Future<Response<T>> {
   ///
   /// 示例：
   /// ```dart
-  /// await http.send(...).onFailure((error) => print('错误: $error'));
+  /// await http.send(...).onFailure((httpStatusCode, errorCode, message) {
+  ///   print('HTTP 状态码: $httpStatusCode, 业务错误码: $errorCode, 错误消息: $message');
+  ///   if (httpStatusCode == 401) {
+  ///     // 处理 HTTP 401 未授权
+  ///   } else if (errorCode == 1001) {
+  ///     // 处理业务错误码 1001
+  ///   }
+  /// });
   /// ```
-  Future<Response<T>> onFailure(Function(String) callback) async {
+  Future<Response<T>> onFailure(
+      void Function(int? httpStatusCode, int? errorCode, String message)
+          callback) async {
     final response = await this;
     final result = response.onFailure(callback);
     // 注意：不再在这里关闭 loading

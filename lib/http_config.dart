@@ -63,10 +63,56 @@ class HttpConfig {
   /// 如果为 null，则使用默认消息
   final String? networkErrorKey;
 
-  /// 错误消息显示回调
+  /// 401 未授权回调（专门处理 401 错误）
+  /// 
+  /// 包层面会自动对 401 进行去重处理，在 [errorDeduplicationWindow] 时间窗口内
+  /// 只会调用一次此回调，避免并发请求时重复处理。
+  /// 
+  /// 如果设置了此回调，401 错误将优先使用此回调，不再调用 [onFailure]。
+  /// 
+  /// 示例：
+  /// ```dart
+  /// on401Unauthorized: () {
+  ///   AuthUtil.clearLoginInfo();
+  ///   Get.offAllNamed(Routes.LOGIN);
+  ///   Get.snackbar('提示', '登录已过期，请重新登录');
+  /// }
+  /// ```
+  final VoidCallback? on401Unauthorized;
+
+  /// 错误消息显示回调（全局默认错误处理）
   /// 如果为 null，则不显示错误提示
-  /// [message] 可能是国际化键，需要在回调中自行翻译
-  final void Function(String message)? onError;
+  /// 
+  /// 回调参数：
+  /// - [httpStatusCode] HTTP 状态码（如 200, 404, 500 等，可能为 null）
+  /// - [errorCode] 业务错误码（可能为 null，取决于 Response 实现）
+  /// - [message] 错误消息（可能是国际化键，需要在回调中自行翻译）
+  /// 
+  /// 注意：
+  /// - 如果用户使用了链式调用的 onFailure，此回调不会被调用（优先级：链式调用的 onFailure > 全局的 onFailure）
+  /// - 如果设置了 [on401Unauthorized]，401 错误不会调用此回调
+  /// 
+  /// 示例：
+  /// ```dart
+  /// onFailure: (httpStatusCode, errorCode, message) {
+  ///   print('HTTP 状态码: $httpStatusCode, 业务错误码: $errorCode, 错误消息: $message');
+  ///   if (errorCode == 1001) {
+  ///     // 处理业务错误码 1001
+  ///   }
+  /// }
+  /// ```
+  final void Function(int? httpStatusCode, int? errorCode, String message)? onFailure;
+
+  /// 错误去重时间窗口（默认 5 秒）
+  /// 
+  /// 在时间窗口内，相同错误码的错误只会处理一次。
+  /// 主要用于 401 错误的去重，避免并发请求时重复跳转登录页。
+  /// 
+  /// 示例：
+  /// ```dart
+  /// errorDeduplicationWindow: Duration(seconds: 5), // 5 秒内相同错误码只处理一次
+  /// ```
+  final Duration errorDeduplicationWindow;
 
   /// 是否启用日志打印（默认 false）
   /// 启用后会自动打印请求和响应信息
@@ -175,7 +221,9 @@ class HttpConfig {
     this.staticHeaders,
     this.dynamicHeaderBuilder,
     this.networkErrorKey,
-    this.onError,
+    this.on401Unauthorized,
+    this.onFailure,
+    this.errorDeduplicationWindow = const Duration(seconds: 5),
     this.enableLogging = false,
     this.logPrintBody = true,
     this.logMode = LogMode.complete,

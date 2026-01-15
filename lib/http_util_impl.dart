@@ -42,6 +42,10 @@ class HttpUtil {
   /// 获取请求队列管理器（如果已配置）
   static RequestQueue? get requestQueue => _requestQueue;
 
+  /// 错误处理时间戳记录（key: 错误码，value: 处理时间）
+  /// 用于错误去重，避免相同错误码在时间窗口内重复处理
+  static final Map<int, DateTime> _errorHandledTimestamps = {};
+
   /// 单例获取
   static HttpUtil get instance {
     _instance ??= HttpUtil._();
@@ -372,6 +376,31 @@ extension HttpUtilSafeCall on HttpUtil {
   /// 获取配置（内部使用）
   static HttpConfig? get _config => HttpUtil._config;
 
+  /// 检查错误是否应该被处理（去重检查）
+  /// 
+  /// [httpStatusCode] HTTP 状态码
+  /// [window] 去重时间窗口
+  /// 
+  /// 返回 true 表示应该处理，false 表示在时间窗口内已处理过，应该跳过
+  static bool _shouldHandleError(int? httpStatusCode, Duration window) {
+    if (httpStatusCode == null) return true;
+
+    final now = DateTime.now();
+    final lastHandled = HttpUtil._errorHandledTimestamps[httpStatusCode];
+
+    if (lastHandled == null || now.difference(lastHandled) >= window) {
+      HttpUtil._errorHandledTimestamps[httpStatusCode] = now;
+      return true;
+    }
+
+    return false; // 在时间窗口内，跳过处理
+  }
+
+  /// 清除错误处理记录（用于测试或特殊场景）
+  static void clearErrorHandledRecords() {
+    HttpUtil._errorHandledTimestamps.clear();
+  }
+
   /// 处理网络错误（统一提示）
   /// 返回一个表示网络错误的 Response
   /// 注意：这里返回的 Response 需要由用户通过 ResponseParser 定义
@@ -380,8 +409,9 @@ extension HttpUtilSafeCall on HttpUtil {
     final config = _config;
     final errorMessage = config?.networkErrorKey ?? '网络错误，请稍后重试！';
 
-    if (config?.onError != null) {
-      config!.onError!(errorMessage);
+    // 网络错误没有 httpStatusCode 和 errorCode，直接调用 onFailure
+    if (config?.onFailure != null) {
+      config!.onFailure!(null, null, errorMessage);
     }
 
     // 返回一个简单的错误 Response
@@ -594,10 +624,31 @@ extension HttpUtilSafeCall on HttpUtil {
         if (!response.isSuccess) {
           response.handleError();
 
-          // 如果用户没有实现 handleError，使用配置的 onError 回调
+          // 延迟调用全局的错误处理回调，确保链式调用的 onFailure 可以先执行
+          // 优先级：链式调用的 onFailure > on401Unauthorized > 全局的 onFailure
           final errorMessage = response.errorMessage;
-          if (errorMessage != null && config.onError != null) {
-            config.onError!(errorMessage);
+          if (errorMessage != null) {
+            final httpStatusCode = response.httpStatusCode; // 获取 HTTP 状态码
+            final errorCode = response.errorCode; // 获取业务错误码
+            Future.microtask(() {
+              // 再次检查 errorHandled，如果链式调用的 onFailure 已经处理了，就不调用全局的错误处理
+              if (!response.errorHandled) {
+                // 优先级 1：401 且设置了 on401Unauthorized
+                if (httpStatusCode == 401 && config.on401Unauthorized != null) {
+                  // 检查是否需要去重
+                  if (HttpUtilSafeCall._shouldHandleError(401, config.errorDeduplicationWindow)) {
+                    config.on401Unauthorized!();
+                  }
+                  // 401 已由 on401Unauthorized 处理，不再调用 onFailure
+                  return;
+                }
+
+                // 优先级 2：其他错误或 401 但没有设置 on401Unauthorized
+                if (config.onFailure != null) {
+                  config.onFailure!(httpStatusCode, errorCode, errorMessage);
+                }
+              }
+            });
           }
         }
 
@@ -850,10 +901,18 @@ extension HttpUtilFileUpload on HttpUtil {
       if (!response.isSuccess) {
         response.handleError();
 
-        // 如果用户没有实现 handleError，使用配置的 onError 回调
+        // 延迟调用全局的 onFailure，确保链式调用的 onFailure 可以先执行
+        // 优先级：链式调用的 onFailure > 全局的 onFailure（如果用户使用了链式调用的 onFailure，就不调用全局的 onFailure）
         final errorMessage = response.errorMessage;
-        if (errorMessage != null && config.onError != null) {
-          config.onError!(errorMessage);
+        if (errorMessage != null && config.onFailure != null) {
+          final httpStatusCode = response.httpStatusCode; // 获取 HTTP 状态码
+          final errorCode = response.errorCode; // 获取业务错误码
+          Future.microtask(() {
+            // 再次检查 errorHandled，如果链式调用的 onFailure 已经处理了，就不调用全局的 onFailure
+            if (!response.errorHandled) {
+              config.onFailure!(httpStatusCode, errorCode, errorMessage);
+            }
+          });
         }
       }
 
@@ -869,8 +928,8 @@ extension HttpUtilFileUpload on HttpUtil {
     final config = HttpUtilSafeCall._config;
     final errorMessage = config?.networkErrorKey ?? '网络错误，请稍后重试！';
 
-    if (config?.onError != null) {
-      config!.onError!(errorMessage);
+    if (config?.onFailure != null) {
+      config!.onFailure!(null, null, errorMessage); // 网络错误没有 httpStatusCode 和 errorCode
     }
 
     return SimpleErrorResponse<T>(errorMessage);
@@ -953,12 +1012,20 @@ extension HttpUtilFileUpload on HttpUtil {
       if (!isSuccess) {
         final config = HttpUtilSafeCall._config;
         final errorMessage = response.errorMessage ?? '上传失败，请稍后重试！';
-        // 直接使用 HttpConfig 的 onError 回调，确保错误提示能正确显示
-        if (config?.onError != null) {
-          config!.onError!(errorMessage);
-        }
-        // 同时调用 handleError（如果 ApiResponse 设置了静态错误处理器）
+        // 调用 handleError（保持接口兼容性，实际错误处理由 HttpConfig.onFailure 统一处理）
         response.handleError();
+        // 延迟调用全局的 onFailure，确保链式调用的 onFailure 可以先执行
+        // 优先级：链式调用的 onFailure > 全局的 onFailure（如果用户使用了链式调用的 onFailure，就不调用全局的 onFailure）
+        if (config?.onFailure != null) {
+          final httpStatusCode = response.httpStatusCode; // 获取 HTTP 状态码
+          final errorCode = response.errorCode; // 获取业务错误码
+          Future.microtask(() {
+            // 再次检查 errorHandled，如果链式调用的 onFailure 已经处理了，就不调用全局的 onFailure
+            if (!response.errorHandled) {
+              config!.onFailure!(httpStatusCode, errorCode, errorMessage);
+            }
+          });
+        }
       }
 
       return response;
@@ -967,8 +1034,8 @@ extension HttpUtilFileUpload on HttpUtil {
       final config = HttpUtilSafeCall._config;
       final errorMessage = config?.networkErrorKey ?? '上传失败，请稍后重试！';
 
-      if (config?.onError != null) {
-        config!.onError!(errorMessage);
+      if (config?.onFailure != null) {
+        config!.onFailure!(null, null, errorMessage); // 上传异常没有 httpStatusCode 和 errorCode
       }
 
       return ApiResponse<T>(
@@ -1405,8 +1472,8 @@ extension HttpUtilFileDownload on HttpUtil {
 
       // 触发错误提示
       final config = HttpUtilSafeCall._config;
-      if (config?.onError != null) {
-        config!.onError!(errorMessage);
+      if (config?.onFailure != null) {
+        config!.onFailure!(null, null, errorMessage); // 下载异常没有 httpStatusCode 和 errorCode
       }
 
       return DownloadResponse.failure<String>(errorMessage: errorMessage);
@@ -1421,8 +1488,8 @@ extension HttpUtilFileDownload on HttpUtil {
 
       // 触发错误提示
       final config = HttpUtilSafeCall._config;
-      if (config?.onError != null) {
-        config!.onError!(errorMessage);
+      if (config?.onFailure != null) {
+        config!.onFailure!(null, null, errorMessage); // 下载异常没有 httpStatusCode 和 errorCode
       }
 
       return DownloadResponse.failure<String>(errorMessage: errorMessage);

@@ -15,6 +15,7 @@
 - ✅ 用户自定义响应类 - 通过 `Response<T>` 抽象类完全控制响应结构
 - ✅ 统一的便利方法（`onSuccess`, `onFailure`, `extract`, `getData`）
 - ✅ 自动错误处理和提示
+- ✅ 401 错误自动去重 - 避免并发请求时重复跳转登录页
 - ✅ 类型安全的 HTTP 方法常量
 - ✅ 可配置的日志打印
 - ✅ 文件上传支持 - 单文件、多文件上传，支持进度回调
@@ -31,7 +32,7 @@
 
 ```yaml
 dependencies:
-  dio_http_util: ^1.4.1
+  dio_http_util: ^1.5.0
 ```
 
 ## 快速开始
@@ -61,7 +62,23 @@ void main() async {
         if (token != null) headers['Authorization'] = 'Bearer $token';
         return headers;
       },
-      onError: (message) => print('错误: $message'),
+      // 401 专门处理，自动去重（5秒内只处理一次）
+      on401Unauthorized: () {
+        AuthUtil.clearLoginInfo();
+        Get.offAllNamed(Routes.LOGIN);
+        Get.snackbar('提示', '登录已过期，请重新登录');
+      },
+      // 处理其他错误（非 401）
+      onFailure: (httpStatusCode, errorCode, message) {
+        // 打印错误信息，方便调试
+        print('🔍 [错误信息] HTTP 状态码: $httpStatusCode, 业务错误码: $errorCode, 错误消息: $message');
+        // 可以根据 httpStatusCode 和 errorCode 执行不同的业务逻辑
+        if (errorCode == 1001) {
+          // 处理业务错误码 1001
+        }
+        // 显示错误提示（message 可能是国际化键，需要翻译）
+        Get.snackbar('错误', message);
+      },
       enableLogging: true,
     ),
   );
@@ -128,7 +145,7 @@ if (token != null) saveToken(token);
 3. 特定请求头（`headers` 参数）- 优先级最高，会覆盖全局同名请求头
 
 **说明：**
-- 如果响应失败（`isSuccess == false`），工具类会自动调用 `onError` 回调显示错误提示
+- 如果响应失败（`isSuccess == false`），工具类会自动调用 `onFailure` 回调显示错误提示
 - `extract` 方法内部已检查 `isSuccess`，失败时返回 `null`
 - `onSuccess` 是可选的，仅用于让成功逻辑更清晰
 
@@ -447,7 +464,17 @@ final userName = await http.send(...).extractPath<String>('user.name');
 // 成功/失败回调
 await http.send(...)
   .onSuccess(() => print('成功'))
-  .onFailure((error) => print('失败: $error'));
+  .onFailure((httpStatusCode, errorCode, message) {
+    // 注意：401 错误不会走到这里（如果设置了 on401Unauthorized）
+    // 可以根据 httpStatusCode 和 errorCode 执行不同的业务逻辑
+    if (errorCode == 1001) {
+      // 处理业务错误码 1001
+      print('业务错误: $message');
+    } else {
+      // 处理其他错误
+      print('🔍 [错误信息] HTTP 状态码: $httpStatusCode, 业务错误码: $errorCode, 错误消息: $message');
+    }
+  });
 
 // 链式调用下一个请求（传递前一个响应）
 final result = await http.send(...)
@@ -555,6 +582,87 @@ final result = await http.send(
 - ✅ 只需在第一步设置，后续步骤自动继承，无需重复设置
 - ✅ 整个链路只显示一个加载提示，避免闪烁
 - ✅ 链路结束时自动关闭，无需手动管理
+
+## 错误处理
+
+### 错误处理优先级
+
+工具包提供了多层次的错误处理机制，优先级从高到低：
+
+1. **链式调用的 `onFailure`**（最高优先级）
+   - 如果使用了链式调用的 `onFailure`，错误将被标记为已处理
+   - 全局的错误处理回调不会被调用
+
+2. **`on401Unauthorized`**（专门处理 401 错误）
+   - 如果设置了 `on401Unauthorized`，401 错误将优先使用此回调
+   - 自动去重：在 `errorDeduplicationWindow` 时间窗口内（默认 5 秒），401 错误只会处理一次
+   - 401 错误不会调用 `onFailure` 回调
+
+3. **全局的 `onFailure`**（兜底处理）
+   - 处理其他错误（非 401）或 401 但没有设置 `on401Unauthorized` 的情况
+
+### 401 错误处理（推荐）
+
+**问题场景**：首次进入应用时，可能并发请求多个接口，如果 token 过期，所有请求都会返回 401，导致：
+- 多个 snackbar 同时弹出
+- 可能多次跳转登录页
+- 用户体验差
+
+**解决方案**：使用 `on401Unauthorized` 回调，包层面自动去重：
+
+```dart
+HttpUtil.configure(
+  HttpConfig(
+    baseUrl: 'https://api.example.com/v1',
+    // 401 专门处理，自动去重（5秒内只处理一次）
+    on401Unauthorized: () {
+      // 清除登录信息
+      AuthUtil.clearLoginInfo();
+      // 跳转到登录页（只跳转一次）
+      Get.offAllNamed(Routes.LOGIN);
+      // 显示提示（只显示一次）
+      Get.snackbar('提示', '登录已过期，请重新登录');
+    },
+    // 处理其他错误（非 401）
+    onFailure: (httpStatusCode, errorCode, message) {
+      // 401 不会走到这里
+      Get.snackbar('错误', message);
+    },
+    // 可选：自定义去重时间窗口（默认 5 秒）
+    errorDeduplicationWindow: Duration(seconds: 5),
+  ),
+);
+```
+
+**优势**：
+- ✅ 自动去重：并发 401 错误在时间窗口内只处理一次
+- ✅ 逻辑清晰：401 和其他错误分离处理
+- ✅ 使用简单：只需设置回调，无需关心去重逻辑
+
+### 其他错误处理
+
+如果不需要专门处理 401，可以只使用 `onFailure`：
+
+```dart
+HttpUtil.configure(
+  HttpConfig(
+    baseUrl: 'https://api.example.com/v1',
+    onFailure: (httpStatusCode, errorCode, message) {
+      // 所有错误（包括 401）都走这里
+      if (httpStatusCode == 401) {
+        // 处理 401，但需要自己实现去重逻辑
+        AuthUtil.clearLoginInfo();
+        Get.offAllNamed(Routes.LOGIN);
+      } else {
+        // 处理其他错误
+        Get.snackbar('错误', message);
+      }
+    },
+  ),
+);
+```
+
+**注意**：如果只使用 `onFailure` 处理 401，需要自己实现去重逻辑，避免并发请求时重复处理。
 
 ## 自定义响应解析器
 
@@ -831,7 +939,9 @@ if (response is PagedResponse<User>) {
 | `staticHeaders` | `Map<String, String>?` | 静态请求头 |
 | `dynamicHeaderBuilder` | `Future<Map<String, String>> Function()?` | 动态请求头构建器 |
 | `networkErrorKey` | `String?` | 网络错误提示消息的键（用于国际化） |
-| `onError` | `void Function(String message)?` | 错误提示回调 |
+| `on401Unauthorized` | `VoidCallback?` | 401 未授权回调（专门处理 401 错误，自动去重） |
+| `onFailure` | `void Function(int? httpStatusCode, int? errorCode, String message)?` | 错误提示回调（全局默认错误处理，401 不会调用此回调） |
+| `errorDeduplicationWindow` | `Duration` | 错误去重时间窗口（默认 5 秒） |
 | `enableLogging` | `bool` | 是否启用日志（默认 false） |
 | `logPrintBody` | `bool` | 是否打印 body（默认 true） |
 | `logMode` | `LogMode` | 日志模式：`complete`（推荐）、`realTime`、`brief` |
@@ -851,12 +961,16 @@ if (response is PagedResponse<User>) {
 - `String? get errorMessage` - 错误消息（如果失败）
 - `T? get data` - 数据（如果成功）
 
+**可选实现的属性：**
+- `int? get errorCode` - 业务错误码（如果失败，可选，默认返回 null）
+- `int? get httpStatusCode` - HTTP 状态码（可选，默认返回 null）
+
 **可选实现的方法：**
 - `handleError()` - 处理错误（默认实现为空，用户可以在自己的响应类中重写）
 
 **可用方法（有默认实现）：**
 - `onSuccess(callback)` - 成功时执行回调
-- `onFailure(callback)` - 失败时执行回调
+- `onFailure(callback)` - 失败时执行回调，接收三个参数：`(httpStatusCode, errorCode, message)`
 - `extract<R>(extractor)` - 提取并转换数据（仅在成功时执行）
 - `extractField<R>(key)` - 从 Map 提取字段（最简单的方式）
 - `extractModel<R>(fromJson)` - 从 Map 提取模型（类型安全）
@@ -871,7 +985,7 @@ if (response is PagedResponse<User>) {
 - `Future<Response<T>>.extractPath<R>(path)` - 链式调用提取嵌套字段
 - `Future<Response<T>>.extract<R>(extractor)` - 链式调用通用提取
 - `Future<Response<T>>.onSuccess(callback)` - 链式调用成功回调
-- `Future<Response<T>>.onFailure(callback)` - 链式调用失败回调
+- `Future<Response<T>>.onFailure(callback)` - 链式调用失败回调，接收三个参数：`(httpStatusCode, errorCode, message)`
 - `Future<Response<T>>.then<R>(nextRequest)` - 链式调用下一个请求（传递前一个响应）
 - `Future<Response<T>>.thenIf<R>(condition, nextRequest)` - 条件链式调用
 
@@ -1229,7 +1343,7 @@ final response2 = await http.uploadToUrlResponse(
 **返回值：**
 - 返回 `Future<Response<T>>`，支持链式调用
 - 可以通过 `response.isSuccess` 检查是否成功
-- 失败时会自动触发错误提示（通过 `HttpConfig.onError`）
+- 失败时会自动触发错误提示（通过 `HttpConfig.onFailure`）
 
 **输入验证：**
 - 自动验证 `uploadUrl` 是否为有效的 URL 格式，无效时抛出 `ArgumentError`
@@ -1240,7 +1354,7 @@ final response2 = await http.uploadToUrlResponse(
 - `uploadToUrlResponse` 不依赖 `baseUrl` 配置，直接使用完整 URL
 - OSS 签名信息通常已经在 URL 中，一般不需要额外添加请求头
 - 上传成功后，OSS 通常返回 200 或 204 状态码
-- 上传失败时会自动触发错误提示（通过 `HttpConfig.onError`）
+- 上传失败时会自动触发错误提示（通过 `HttpConfig.onFailure`）
 - 支持链式调用，可以继续使用 `.thenWith()` 等方法
 - 如果需要获取文件访问 URL，通常需要从后端接口获取
 - 进度回调中的 `sent` 和 `total` 可能为 -1（未知大小），需要在回调中处理

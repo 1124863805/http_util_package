@@ -15,6 +15,7 @@ A powerful HTTP utility package based on Dio with configurable header injection 
 - ✅ User-defined response classes - fully control response structure through `Response<T>` abstract class
 - ✅ Unified convenience methods (`onSuccess`, `onFailure`, `extract`, `getData`)
 - ✅ Automatic error handling and prompts
+- ✅ 401 error automatic deduplication - prevents duplicate login page redirects during concurrent requests
 - ✅ Type-safe HTTP method constants
 - ✅ Configurable logging
 - ✅ File upload support - single file, multiple files upload, with progress callback
@@ -56,7 +57,23 @@ void main() async {
         if (token != null) headers['Authorization'] = 'Bearer $token';
         return headers;
       },
-      onError: (message) => print('Error: $message'),
+      // Handle 401 specifically with automatic deduplication (only once within 5 seconds)
+      on401Unauthorized: () {
+        AuthUtil.clearLoginInfo();
+        Get.offAllNamed(Routes.LOGIN);
+        Get.snackbar('Tip', 'Login expired, please login again');
+      },
+      // Handle other errors (non-401)
+      onFailure: (httpStatusCode, errorCode, message) {
+        // Print error info for debugging
+        print('🔍 [Error Info] HTTP Status Code: $httpStatusCode, Business Error Code: $errorCode, Error Message: $message');
+        // Can execute different business logic based on httpStatusCode and errorCode
+        if (errorCode == 1001) {
+          // Handle business error code 1001
+        }
+        // Show error prompt (message might be an i18n key, needs translation)
+        Get.snackbar('Error', message);
+      },
       // Configure loading indicator (optional)
       contextGetter: () => Get.context, // or navigatorKey.currentContext
       enableLogging: true,
@@ -125,7 +142,7 @@ if (token != null) saveToken(token);
 3. Request-specific headers (`headers` parameter) - highest priority, will override global headers with the same key
 
 **Notes:**
-- If response fails (`isSuccess == false`), the tool will automatically call `onError` callback to show error prompt
+- If response fails (`isSuccess == false`), the tool will automatically call `onFailure` callback to show error prompt
 - `extract` method internally checks `isSuccess`, returns `null` on failure
 - `onSuccess` is optional, only used to make success logic clearer
 
@@ -444,7 +461,17 @@ final userName = await http.send(...).extractPath<String>('user.name');
 // Success/failure callbacks
 await http.send(...)
   .onSuccess(() => print('Success'))
-  .onFailure((error) => print('Failed: $error'));
+  .onFailure((httpStatusCode, errorCode, message) {
+    // Note: 401 errors will not reach here (if on401Unauthorized is set)
+    // Can execute different business logic based on httpStatusCode and errorCode
+    if (errorCode == 1001) {
+      // Handle business error code 1001
+      print('Business error: $message');
+    } else {
+      // Handle other errors
+      print('🔍 [Error Info] HTTP Status Code: $httpStatusCode, Business Error Code: $errorCode, Error Message: $message');
+    }
+  });
 ```
 
 ### Loading Indicator Management in Chain Calls
@@ -1027,7 +1054,9 @@ class CustomResponseParser implements ResponseParser {
 | `staticHeaders` | `Map<String, String>?` | Static request headers |
 | `dynamicHeaderBuilder` | `Future<Map<String, String>> Function()?` | Dynamic request header builder |
 | `networkErrorKey` | `String?` | Network error prompt message key (for internationalization) |
-| `onError` | `void Function(String message)?` | Error prompt callback |
+| `on401Unauthorized` | `VoidCallback?` | 401 Unauthorized callback (specifically handles 401 errors with automatic deduplication) |
+| `onFailure` | `void Function(int? httpStatusCode, int? errorCode, String message)?` | Error prompt callback (global default error handler, 401 will not call this callback) |
+| `errorDeduplicationWindow` | `Duration` | Error deduplication time window (default 5 seconds) |
 | `enableLogging` | `bool` | Whether to enable logging (default false) |
 | `logPrintBody` | `bool` | Whether to print body (default true) |
 | `logMode` | `LogMode` | Log mode: `complete` (recommended), `realTime`, `brief` |
@@ -1052,7 +1081,7 @@ Response abstract class, all response classes must inherit this.
 
 **Available methods (with default implementation):**
 - `onSuccess(callback)` - Execute callback on success
-- `onFailure(callback)` - Execute callback on failure
+- `onFailure(callback)` - Execute callback on failure, receives three parameters: `(httpStatusCode, errorCode, message)`
 - `extract<R>(extractor)` - Extract and convert data (only executed on success)
 - `extractField<R>(key)` - Extract field from Map (simplest way)
 - `extractModel<R>(fromJson)` - Extract model from Map (type-safe)
@@ -1067,7 +1096,7 @@ Response abstract class, all response classes must inherit this.
 - `Future<Response<T>>.extractPath<R>(path)` - Chain call extract nested field
 - `Future<Response<T>>.extract<R>(extractor)` - Chain call general extract
 - `Future<Response<T>>.onSuccess(callback)` - Chain call success callback
-- `Future<Response<T>>.onFailure(callback)` - Chain call failure callback
+- `Future<Response<T>>.onFailure(callback)` - Chain call failure callback, receives three parameters: `(httpStatusCode, errorCode, message)`
 - `Future<Response<T>>.then<R>(nextRequest)` - Chain call to next request (pass previous response)
 - `Future<Response<T>>.thenIf<R>(condition, nextRequest)` - Conditional chain call
 

@@ -22,6 +22,7 @@ class StandardResponseParser implements ResponseParser {
         code: -1,
         message: '响应格式错误',
         data: null,
+        httpStatusCode: response.statusCode, // 传递 HTTP 状态码
       );
     }
 
@@ -30,6 +31,7 @@ class StandardResponseParser implements ResponseParser {
       code: (data['code'] as int?) ?? -1,
       message: (data['message'] as String?) ?? '',
       data: data['data'],
+      httpStatusCode: response.statusCode, // 传递 HTTP 状态码
     );
   }
 }

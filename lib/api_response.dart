@@ -10,16 +10,7 @@ class ApiResponse<T> extends Response<T> {
   final String message;
   final dynamic _data;
   final bool isSuccess;
-
-  /// 错误消息显示回调（由 HttpConfig 注入）
-  static void Function(String message)? _onError;
-
-  /// 设置错误消息显示回调
-  static void setErrorHandler(
-    void Function(String message)? handler,
-  ) {
-    _onError = handler;
-  }
+  final int? _httpStatusCode;
 
   /// 构造函数
   ApiResponse({
@@ -27,20 +18,27 @@ class ApiResponse<T> extends Response<T> {
     required this.message,
     dynamic data,
     bool? isSuccess,
+    int? httpStatusCode,
   })  : _data = data,
-        isSuccess = isSuccess ?? (code == 0);
+        isSuccess = isSuccess ?? (code == 0),
+        _httpStatusCode = httpStatusCode;
 
   @override
   String? get errorMessage => isSuccess ? null : message;
 
   @override
+  int? get errorCode => isSuccess ? null : code;
+
+  @override
+  int? get httpStatusCode => _httpStatusCode;
+
+  @override
   T? get data => _data as T?;
 
   /// 自动处理错误（失败时自动显示错误消息）
+  /// 注意：错误处理现在统一由 HttpConfig.onFailure 处理
   @override
   void handleError() {
-    if (!isSuccess && _onError != null) {
-      _onError!(message);
-    }
+    // 错误处理已统一由 HttpConfig.onFailure 处理，此方法保留为空实现以保持接口兼容性
   }
 }

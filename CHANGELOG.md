@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-01-15
+
+### Added
+- **401 错误自动去重处理**
+  - 新增 `on401Unauthorized` 回调，专门处理 401 未授权错误
+  - 自动去重：在 `errorDeduplicationWindow` 时间窗口内（默认 5 秒），401 错误只会处理一次
+  - 避免并发请求时重复跳转登录页和显示多个错误提示
+  - 支持自定义去重时间窗口（`errorDeduplicationWindow` 参数）
+- **错误处理优先级机制**
+  - 错误处理优先级：链式调用的 `onFailure` > `on401Unauthorized` > 全局的 `onFailure`
+  - 如果设置了 `on401Unauthorized`，401 错误将优先使用此回调，不再调用 `onFailure`
+  - 链式调用的 `onFailure` 具有最高优先级，会阻止全局错误处理回调的执行
+
+### 改进
+- 优化了错误处理逻辑，支持多层次的错误处理机制
+- 更新了文档，添加了 401 错误处理的完整说明和示例
+- 完善了 API 文档，添加了 `on401Unauthorized` 和 `errorDeduplicationWindow` 参数的说明
+- 提供了推荐的最佳实践：使用 `on401Unauthorized` 处理 401 错误，使用 `onFailure` 处理其他错误
+
 ## [1.4.4] - 2026-01-15
 
 ### 改进
