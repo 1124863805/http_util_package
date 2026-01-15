@@ -28,6 +28,8 @@ class SSEManager {
   /// [data] 请求体数据（POST 请求时使用）
   /// [queryParameters] URL 查询参数
   /// [headers] 特定请求的请求头（可选），会与全局请求头合并，如果键相同则覆盖全局请求头
+  /// [baseUrl] 直接指定 baseUrl（最高优先级）
+  /// [service] 使用 serviceBaseUrls 中定义的服务名称
   /// [onData] 数据回调
   /// [onError] 错误回调（可选）
   /// [onDone] 完成回调（可选）
@@ -39,7 +41,7 @@ class SSEManager {
   /// ```dart
   /// final manager = http.sseManager();
   ///
-  /// // 建立第一个连接
+  /// // 建立第一个连接（使用默认 baseUrl）
   /// await manager.connect(
   ///   id: 'chat',
   ///   path: '/ai/chat/stream',
@@ -49,10 +51,11 @@ class SSEManager {
   ///   onData: (event) => print('聊天: ${event.data}'),
   /// );
   ///
-  /// // 建立第二个连接
+  /// // 建立第二个连接（使用服务）
   /// await manager.connect(
   ///   id: 'notifications',
   ///   path: '/notifications/stream',
+  ///   service: 'files', // 使用 files 服务
   ///   onData: (event) => print('通知: ${event.data}'),
   /// );
   /// ```
@@ -63,6 +66,8 @@ class SSEManager {
     dynamic data,
     Map<String, String>? queryParameters,
     Map<String, String>? headers,
+    String? baseUrl,
+    String? service,
     required void Function(SSEEvent event) onData,
     void Function(Object error)? onError,
     void Function()? onDone,

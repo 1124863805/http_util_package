@@ -31,7 +31,7 @@
 
 ```yaml
 dependencies:
-  dio_http_util: ^1.4.0
+  dio_http_util: ^1.4.1
 ```
 
 ## 快速开始
@@ -47,7 +47,12 @@ void main() async {
   // 初始化（responseParser 可选，默认使用 StandardResponseParser）
   http_util.HttpUtil.configure(
     http_util.HttpConfig(
-      baseUrl: 'https://api.example.com/v1',
+      baseUrl: 'https://api.example.com/v1', // 默认 baseUrl
+      // 可选：配置多个服务的 baseUrl
+      serviceBaseUrls: {
+        'files': 'https://files.example.com',
+        'cdn': 'https://cdn.example.com',
+      },
       staticHeaders: {'App-Channel': 'ios', 'app': 'myapp'},
       dynamicHeaderBuilder: () async {
         final headers = <String, String>{};
@@ -109,6 +114,8 @@ if (token != null) saveToken(token);
 - `priority` - 请求优先级（默认 0），仅在启用队列时有效，数字越大优先级越高
 - `skipQueue` - 是否跳过队列（默认 false），如果为 true，即使启用了队列也会直接执行
 - `skipDeduplication` - 是否跳过去重（默认 false），如果为 true，即使启用了去重也会直接执行
+- `baseUrl` - 直接指定 baseUrl（可选，最高优先级），会覆盖默认 baseUrl 和服务配置
+- `service` - 使用 `serviceBaseUrls` 中定义的服务名称（可选），如 'files'、'cdn' 等
 
 **请求头优先级（从低到高）：**
 1. 静态请求头（`staticHeaders`）- 优先级最低
@@ -119,6 +126,126 @@ if (token != null) saveToken(token);
 - 如果响应失败（`isSuccess == false`），工具类会自动调用 `onError` 回调显示错误提示
 - `extract` 方法内部已检查 `isSuccess`，失败时返回 `null`
 - `onSuccess` 是可选的，仅用于让成功逻辑更清晰
+
+## 多服务支持（多 baseUrl）
+
+### 功能说明
+
+在实际开发中，一个应用可能需要访问多个不同的服务（不同的域名），例如：
+- 主 API 服务：`https://api.example.com/v1`
+- 文件服务：`https://files.example.com`
+- CDN 服务：`https://cdn.example.com`
+- 第三方服务：`https://third-party.com/api`
+
+`dio_http_util` 支持通过配置 `serviceBaseUrls` 来管理多个服务，并在请求时灵活选择使用哪个服务。
+
+### 配置方式
+
+在初始化时配置多个服务的 baseUrl：
+
+```dart
+HttpUtil.configure(
+  HttpConfig(
+    baseUrl: 'https://api.example.com/v1', // 默认 baseUrl
+    // 配置多个服务的 baseUrl
+    serviceBaseUrls: {
+      'files': 'https://files.example.com',
+      'cdn': 'https://cdn.example.com',
+      'third-party': 'https://third-party.com/api',
+    },
+  ),
+);
+```
+
+### 使用方式
+
+**方式 1：使用默认 baseUrl（最常见）**
+```dart
+// 使用默认 baseUrl（https://api.example.com/v1）
+final response = await http.send(
+  method: hm.get,
+  path: '/users',
+);
+```
+
+**方式 2：使用服务名称**
+```dart
+// 使用 files 服务（https://files.example.com）
+final response = await http.send(
+  method: hm.post,
+  path: '/upload',
+  service: 'files', // 使用 serviceBaseUrls 中定义的 'files' 服务
+);
+```
+
+**方式 3：直接指定 baseUrl（最高优先级）**
+```dart
+// 直接指定 baseUrl，无需配置
+final response = await http.send(
+  method: hm.get,
+  path: '/data',
+  baseUrl: 'https://custom.example.com', // 直接指定，会覆盖默认 baseUrl 和服务配置
+);
+```
+
+### baseUrl 选择优先级
+
+1. **直接指定的 `baseUrl` 参数**（最高优先级）
+2. **`service` 参数**（从 `serviceBaseUrls` 中查找）
+3. **默认 `baseUrl`**（最低优先级）
+
+### 完整示例
+
+```dart
+// 配置
+HttpUtil.configure(
+  HttpConfig(
+    baseUrl: 'https://api.example.com/v1',
+    serviceBaseUrls: {
+      'files': 'https://files.example.com',
+      'cdn': 'https://cdn.example.com',
+    },
+  ),
+);
+
+// 使用默认服务
+final users = await http.send(
+  method: hm.get,
+  path: '/users',
+);
+
+// 使用 files 服务上传文件
+final uploadResult = await http.send(
+  method: hm.post,
+  path: '/upload',
+  service: 'files',
+  data: {'file': fileData},
+);
+
+// 使用 cdn 服务获取资源
+final resource = await http.send(
+  method: hm.get,
+  path: '/images/avatar.jpg',
+  service: 'cdn',
+);
+
+// 临时使用其他服务（无需配置）
+final thirdPartyData = await http.send(
+  method: hm.get,
+  path: '/data',
+  baseUrl: 'https://third-party.com/api',
+);
+```
+
+### 其他功能支持
+
+多服务支持已集成到所有相关功能中：
+
+- ✅ **文件上传**：支持 `baseUrl` 和 `service` 参数
+- ✅ **文件下载**：支持 `baseUrl` 和 `service` 参数
+- ✅ **SSE（Server-Sent Events）**：支持 `baseUrl` 和 `service` 参数
+- ✅ **请求去重**：基于完整 URL（包含 baseUrl）进行去重
+- ✅ **请求队列**：支持不同服务的请求队列管理
 
 ## 数据提取方法
 
@@ -644,6 +771,7 @@ if (response is PagedResponse<User>) {
 | `loadingWidgetBuilder` | `Widget Function(BuildContext)?` | 自定义加载提示 Widget 构建器（可选） |
 | `deduplicationConfig` | `DeduplicationConfig?` | 请求去重/防抖配置（可选） |
 | `queueConfig` | `QueueConfig?` | 请求队列配置（可选） |
+| `serviceBaseUrls` | `Map<String, String>?` | 服务 baseUrl 映射（可选），key 是服务名称，value 是 baseUrl |
 
 ### Response<T>
 

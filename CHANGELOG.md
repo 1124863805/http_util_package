@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2026-01-15
+
+### Added
+- **多服务支持（多 baseUrl）**
+  - 新增 `serviceBaseUrls` 配置，支持在 `HttpConfig` 中配置多个服务的 baseUrl
+  - `send` 方法新增 `baseUrl` 和 `service` 参数，支持灵活选择使用哪个服务
+  - baseUrl 选择优先级：直接指定的 `baseUrl` 参数 > `service` 参数 > 默认 `baseUrl`
+  - 自动为不同 baseUrl 创建和缓存独立的 Dio 实例，复用拦截器配置
+  - 文件上传、文件下载、SSE 等功能均支持多服务
+  - 请求去重逻辑已更新，基于完整 URL（包含 baseUrl）进行去重
+
+### 改进
+- 优化了 Dio 实例管理，为不同 baseUrl 自动创建独立实例
+- 更新了文档，添加了多服务支持的完整说明和示例
+- 完善了 API 文档，添加了 `serviceBaseUrls` 和相关参数的说明
+
 ## [1.4.0] - 2026-01-15
 
 ### Added

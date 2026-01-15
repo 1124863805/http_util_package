@@ -30,16 +30,22 @@ class RequestDeduplicator {
   });
 
   /// 生成请求唯一标识
-  /// 基于 method + path + queryParameters + data 生成哈希值
+  /// 基于 method + baseUrl + path + queryParameters + data 生成哈希值
   static String _generateRequestKey({
     required String method,
     required String path,
     Map<String, dynamic>? queryParameters,
     dynamic data,
+    String? baseUrl,
   }) {
     final buffer = StringBuffer();
     buffer.write(method.toUpperCase());
     buffer.write('|');
+    // 如果提供了 baseUrl，包含在 key 中（用于区分不同服务）
+    if (baseUrl != null && baseUrl.isNotEmpty) {
+      buffer.write(baseUrl);
+      buffer.write('|');
+    }
     buffer.write(path);
     buffer.write('|');
 
@@ -76,6 +82,7 @@ class RequestDeduplicator {
   /// [path] 请求路径
   /// [queryParameters] 查询参数
   /// [data] 请求体数据
+  /// [baseUrl] 可选的 baseUrl（用于去重时区分不同服务）
   /// [requestExecutor] 实际执行请求的函数
   /// 
   /// 返回 Future，相同请求会共享同一个 Future
@@ -84,6 +91,7 @@ class RequestDeduplicator {
     required String path,
     Map<String, dynamic>? queryParameters,
     dynamic data,
+    String? baseUrl,
     required Future<T> Function() requestExecutor,
   }) async {
     final requestKey = _generateRequestKey(
@@ -91,6 +99,7 @@ class RequestDeduplicator {
       path: path,
       queryParameters: queryParameters,
       data: data,
+      baseUrl: baseUrl,
     );
 
     switch (mode) {

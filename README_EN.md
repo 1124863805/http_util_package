@@ -31,7 +31,7 @@ A powerful HTTP utility package based on Dio with configurable header injection 
 
 ```yaml
 dependencies:
-  dio_http_util: ^1.4.0
+  dio_http_util: ^1.4.1
 ```
 
 ## Quick Start
@@ -111,6 +111,8 @@ if (token != null) saveToken(token);
 - `priority` - Request priority (default 0), only effective when queue is enabled, higher number = higher priority
 - `skipQueue` - Whether to skip queue (default false), if true, will execute directly even if queue is enabled
 - `skipDeduplication` - Whether to skip deduplication (default false), if true, will execute directly even if deduplication is enabled
+- `baseUrl` - Directly specify baseUrl (optional, highest priority), will override default baseUrl and service configuration
+- `service` - Use service name defined in `serviceBaseUrls` (optional), e.g., 'files', 'cdn', etc.
 
 **Header priority (from low to high):**
 1. Static headers (`staticHeaders`) - lowest priority
@@ -121,6 +123,126 @@ if (token != null) saveToken(token);
 - If response fails (`isSuccess == false`), the tool will automatically call `onError` callback to show error prompt
 - `extract` method internally checks `isSuccess`, returns `null` on failure
 - `onSuccess` is optional, only used to make success logic clearer
+
+## Multiple Services Support (Multiple baseUrls)
+
+### Overview
+
+In real-world development, an application may need to access multiple different services (different domains), for example:
+- Main API service: `https://api.example.com/v1`
+- File service: `https://files.example.com`
+- CDN service: `https://cdn.example.com`
+- Third-party service: `https://third-party.com/api`
+
+`dio_http_util` supports managing multiple services by configuring `serviceBaseUrls` and flexibly selecting which service to use when making requests.
+
+### Configuration
+
+Configure multiple service baseUrls during initialization:
+
+```dart
+HttpUtil.configure(
+  HttpConfig(
+    baseUrl: 'https://api.example.com/v1', // Default baseUrl
+    // Configure multiple service baseUrls
+    serviceBaseUrls: {
+      'files': 'https://files.example.com',
+      'cdn': 'https://cdn.example.com',
+      'third-party': 'https://third-party.com/api',
+    },
+  ),
+);
+```
+
+### Usage
+
+**Method 1: Use default baseUrl (most common)**
+```dart
+// Use default baseUrl (https://api.example.com/v1)
+final response = await http.send(
+  method: hm.get,
+  path: '/users',
+);
+```
+
+**Method 2: Use service name**
+```dart
+// Use files service (https://files.example.com)
+final response = await http.send(
+  method: hm.post,
+  path: '/upload',
+  service: 'files', // Use 'files' service defined in serviceBaseUrls
+);
+```
+
+**Method 3: Directly specify baseUrl (highest priority)**
+```dart
+// Directly specify baseUrl, no configuration needed
+final response = await http.send(
+  method: hm.get,
+  path: '/data',
+  baseUrl: 'https://custom.example.com', // Directly specify, will override default baseUrl and service configuration
+);
+```
+
+### baseUrl Selection Priority
+
+1. **Directly specified `baseUrl` parameter** (highest priority)
+2. **`service` parameter** (lookup from `serviceBaseUrls`)
+3. **Default `baseUrl`** (lowest priority)
+
+### Complete Example
+
+```dart
+// Configuration
+HttpUtil.configure(
+  HttpConfig(
+    baseUrl: 'https://api.example.com/v1',
+    serviceBaseUrls: {
+      'files': 'https://files.example.com',
+      'cdn': 'https://cdn.example.com',
+    },
+  ),
+);
+
+// Use default service
+final users = await http.send(
+  method: hm.get,
+  path: '/users',
+);
+
+// Use files service to upload file
+final uploadResult = await http.send(
+  method: hm.post,
+  path: '/upload',
+  service: 'files',
+  data: {'file': fileData},
+);
+
+// Use cdn service to get resource
+final resource = await http.send(
+  method: hm.get,
+  path: '/images/avatar.jpg',
+  service: 'cdn',
+);
+
+// Temporarily use other service (no configuration needed)
+final thirdPartyData = await http.send(
+  method: hm.get,
+  path: '/data',
+  baseUrl: 'https://third-party.com/api',
+);
+```
+
+### Other Features Support
+
+Multiple services support is integrated into all related features:
+
+- ✅ **File Upload**: Supports `baseUrl` and `service` parameters
+- ✅ **File Download**: Supports `baseUrl` and `service` parameters
+- ✅ **SSE (Server-Sent Events)**: Supports `baseUrl` and `service` parameters
+- ✅ **Request Deduplication**: Based on full URL (including baseUrl) for deduplication
+- ✅ **Request Queue**: Supports request queue management for different services
 
 ## Data Extraction Methods
 
@@ -740,6 +862,7 @@ class CustomResponseParser implements ResponseParser {
 | `loadingWidgetBuilder` | `Widget Function(BuildContext)?` | Custom loading indicator Widget builder (optional) |
 | `deduplicationConfig` | `DeduplicationConfig?` | Request deduplication/debouncing configuration (optional) |
 | `queueConfig` | `QueueConfig?` | Request queue configuration (optional) |
+| `serviceBaseUrls` | `Map<String, String>?` | Service baseUrl mapping (optional), key is service name, value is baseUrl |
 
 ### Response<T>
 

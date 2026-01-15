@@ -179,6 +179,7 @@ class HttpUtil {
 
   /// 请求方法（返回 Dio Response）
   /// [method] 请求方式：必须使用 hm.get、hm.post 等常量
+  /// [baseUrl] 可选的 baseUrl，如果提供则覆盖默认 baseUrl
   Future<dio_package.Response> request<T>({
     required String method,
     required String path,
@@ -188,12 +189,16 @@ class HttpUtil {
     dio_package.CancelToken? cancelToken,
     dio_package.ProgressCallback? onSendProgress,
     dio_package.ProgressCallback? onReceiveProgress,
+    String? baseUrl,
   }) async {
     final upperMethod = method.toUpperCase();
 
+    // 如果提供了 baseUrl，需要构建完整 URL 或使用独立的 Dio 实例
+    final dioInstance = baseUrl != null ? _getDioForBaseUrl(baseUrl) : dio;
+
     switch (upperMethod) {
       case hm.get:
-        return dio.get<T>(
+        return dioInstance.get<T>(
           path,
           queryParameters: queryParameters,
           options: options,
@@ -201,7 +206,7 @@ class HttpUtil {
           onReceiveProgress: onReceiveProgress,
         );
       case hm.post:
-        return dio.post<T>(
+        return dioInstance.post<T>(
           path,
           data: data,
           queryParameters: queryParameters,
@@ -211,7 +216,7 @@ class HttpUtil {
           onReceiveProgress: onReceiveProgress,
         );
       case hm.put:
-        return dio.put<T>(
+        return dioInstance.put<T>(
           path,
           data: data,
           queryParameters: queryParameters,
@@ -221,7 +226,7 @@ class HttpUtil {
           onReceiveProgress: onReceiveProgress,
         );
       case hm.delete:
-        return dio.delete<T>(
+        return dioInstance.delete<T>(
           path,
           data: data,
           queryParameters: queryParameters,
@@ -229,7 +234,7 @@ class HttpUtil {
           cancelToken: cancelToken,
         );
       case hm.patch:
-        return dio.patch<T>(
+        return dioInstance.patch<T>(
           path,
           data: data,
           queryParameters: queryParameters,
@@ -242,11 +247,113 @@ class HttpUtil {
         throw ArgumentError('不支持的请求方式: $method，请使用 hm 常量（hm.get、hm.post 等）');
     }
   }
+
+  /// 获取指定 baseUrl 的 Dio 实例
+  /// 如果 baseUrl 与默认 baseUrl 相同，返回默认实例
+  /// 否则创建或返回缓存的独立实例
+  static final Map<String, dio_package.Dio> _dioInstances = {};
+
+  dio_package.Dio _getDioForBaseUrl(String baseUrl) {
+    // 如果与默认 baseUrl 相同，使用默认实例
+    final currentConfig = _config;
+    if (currentConfig != null && baseUrl == currentConfig.baseUrl) {
+      return dio;
+    }
+
+    // 检查缓存
+    if (_dioInstances.containsKey(baseUrl)) {
+      return _dioInstances[baseUrl]!;
+    }
+
+    // 创建新实例（复用拦截器配置）
+    final newDio = dio_package.Dio();
+    newDio.options = dio_package.BaseOptions(
+      baseUrl: baseUrl,
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 30),
+      sendTimeout: const Duration(seconds: 30),
+      validateStatus: (status) => true,
+    );
+
+    // 复制拦截器（请求头、日志等）
+    if (currentConfig != null) {
+      // 添加请求拦截器（自动添加请求头）
+      newDio.interceptors.add(
+        dio_package.InterceptorsWrapper(
+          onRequest: (options, handler) async {
+            // 保存特定请求的请求头（通过 options.headers 传递的，优先级最高）
+            final specificHeaders = Map<String, dynamic>.from(options.headers);
+
+            // 先添加静态请求头（优先级最低）
+            if (currentConfig.staticHeaders != null) {
+              options.headers.addAll(currentConfig.staticHeaders!);
+            }
+
+            // 再添加动态请求头（优先级中等）
+            if (currentConfig.dynamicHeaderBuilder != null) {
+              final dynamicHeaders =
+                  await currentConfig.dynamicHeaderBuilder!();
+              options.headers.addAll(dynamicHeaders);
+            }
+
+            // 最后添加特定请求头（优先级最高，会覆盖全局请求头）
+            options.headers.addAll(specificHeaders);
+
+            handler.next(options);
+          },
+        ),
+      );
+
+      // 添加日志拦截器（如果启用）
+      if (currentConfig.enableLogging) {
+        newDio.interceptors.add(LogInterceptor(
+          printBody: currentConfig.logPrintBody,
+          logMode: currentConfig.logMode,
+          showRequestHint: currentConfig.logShowRequestHint,
+        ));
+      }
+    }
+
+    // 缓存实例
+    _dioInstances[baseUrl] = newDio;
+    return newDio;
+  }
 }
 
 /// HttpUtil 扩展方法
 /// 提供安全调用方法，自动处理异常和错误提示
 extension HttpUtilSafeCall on HttpUtil {
+  /// 解析 baseUrl（优先级从高到低）
+  /// 1. 直接指定的 baseUrl
+  /// 2. 使用服务名称从 serviceBaseUrls 中查找
+  /// 3. 默认 baseUrl
+  static String _resolveBaseUrl(String? baseUrl, String? service) {
+    // 优先级 1: 直接指定的 baseUrl
+    if (baseUrl != null && baseUrl.isNotEmpty) {
+      return baseUrl;
+    }
+
+    // 优先级 2: 使用服务名称
+    if (service != null && service.isNotEmpty) {
+      final config = HttpUtil._config;
+      if (config?.serviceBaseUrls != null) {
+        final serviceBaseUrl = config!.serviceBaseUrls![service];
+        if (serviceBaseUrl != null) {
+          return serviceBaseUrl;
+        }
+        throw ArgumentError('服务 "$service" 未在 serviceBaseUrls 中定义');
+      }
+      throw StateError('未配置 serviceBaseUrls，无法使用服务 "$service"');
+    }
+
+    // 优先级 3: 默认 baseUrl
+    final config = HttpUtil._config;
+    if (config == null) {
+      throw StateError('HttpUtil 未配置，请先调用 HttpUtil.configure() 进行配置');
+    }
+    return config.baseUrl;
+  }
+
   /// 关闭链式调用的加载提示（供 response.dart 使用）
   static void closeChainLoading() {
     if (HttpUtil._chainLoadingId != null) {
@@ -369,6 +476,33 @@ extension HttpUtilSafeCall on HttpUtil {
   ///   headers: {'X-Custom-Header': 'custom-value'}, // 特定请求头，会覆盖全局同名请求头
   /// );
   /// ```
+  ///
+  /// 示例（多服务支持）：
+  /// ```dart
+  /// // 配置
+  /// HttpUtil.configure(
+  ///   HttpConfig(
+  ///     baseUrl: 'https://api.example.com/v1',
+  ///     serviceBaseUrls: {
+  ///       'files': 'https://files.example.com',
+  ///       'cdn': 'https://cdn.example.com',
+  ///     },
+  ///   ),
+  /// );
+  ///
+  /// // 使用默认 baseUrl
+  /// await http.send(method: hm.get, path: '/users');
+  ///
+  /// // 使用服务
+  /// await http.send(method: hm.post, path: '/upload', service: 'files');
+  ///
+  /// // 直接指定 baseUrl（最高优先级）
+  /// await http.send(
+  ///   method: hm.get,
+  ///   path: '/data',
+  ///   baseUrl: 'https://custom.example.com',
+  /// );
+  /// ```
   Future<Response<T>> send<T>({
     required String method,
     required String path,
@@ -379,6 +513,8 @@ extension HttpUtilSafeCall on HttpUtil {
     int priority = 0,
     bool skipDeduplication = false,
     bool skipQueue = false,
+    String? baseUrl, // 直接指定 baseUrl（最高优先级）
+    String? service, // 使用 serviceBaseUrls 中定义的服务名称
   }) async {
     // 实际执行请求的函数
     Future<Response<T>> executeRequest() async {
@@ -411,6 +547,10 @@ extension HttpUtilSafeCall on HttpUtil {
       }
 
       try {
+        // 解析 baseUrl
+        final resolvedBaseUrl =
+            HttpUtilSafeCall._resolveBaseUrl(baseUrl, service);
+
         // 构建请求选项，包含特定请求头
         dio_package.Options? options;
         if (headers != null && headers.isNotEmpty) {
@@ -424,6 +564,7 @@ extension HttpUtilSafeCall on HttpUtil {
           data: data,
           queryParameters: queryParameters,
           options: options,
+          baseUrl: resolvedBaseUrl,
         );
 
         // 检查 500 错误
@@ -474,11 +615,15 @@ extension HttpUtilSafeCall on HttpUtil {
         requestExecutor: () {
           // 如果启用了去重且未跳过去重，使用去重管理器
           if (HttpUtil._deduplicator != null && !skipDeduplication) {
+            // 解析 baseUrl 用于去重
+            final resolvedBaseUrl =
+                HttpUtilSafeCall._resolveBaseUrl(baseUrl, service);
             return HttpUtil._deduplicator!.execute<Response<T>>(
               method: method,
               path: path,
               queryParameters: queryParameters,
               data: data,
+              baseUrl: resolvedBaseUrl,
               requestExecutor: executeRequest,
             );
           } else {
@@ -490,11 +635,15 @@ extension HttpUtilSafeCall on HttpUtil {
 
     // 如果启用了去重且未跳过去重，使用去重管理器
     if (HttpUtil._deduplicator != null && !skipDeduplication) {
+      // 解析 baseUrl 用于去重
+      final resolvedBaseUrl =
+          HttpUtilSafeCall._resolveBaseUrl(baseUrl, service);
       return HttpUtil._deduplicator!.execute<Response<T>>(
         method: method,
         path: path,
         queryParameters: queryParameters,
         data: data,
+        baseUrl: resolvedBaseUrl,
         requestExecutor: executeRequest,
       );
     }
@@ -978,6 +1127,29 @@ extension HttpUtilFileDownload on HttpUtil {
   ///   headers: {'X-Download-Type': 'private'}, // 特定请求头
   /// );
   /// ```
+  ///
+  /// **示例（多服务支持）：**
+  /// ```dart
+  /// // 使用默认 baseUrl
+  /// await http.downloadFile(
+  ///   path: '/api/download/file.pdf',
+  ///   savePath: '/path/to/save/file.pdf',
+  /// );
+  ///
+  /// // 使用服务
+  /// await http.downloadFile(
+  ///   path: '/download/file.pdf',
+  ///   savePath: '/path/to/save/file.pdf',
+  ///   service: 'files', // 使用 files 服务
+  /// );
+  ///
+  /// // 直接指定 baseUrl
+  /// await http.downloadFile(
+  ///   path: '/download/file.pdf',
+  ///   savePath: '/path/to/save/file.pdf',
+  ///   baseUrl: 'https://cdn.example.com',
+  /// );
+  /// ```
   Future<DownloadResponse<String>> downloadFile({
     required String path,
     required String savePath,
@@ -987,14 +1159,20 @@ extension HttpUtilFileDownload on HttpUtil {
     dio_package.CancelToken? cancelToken,
     bool deleteOnError = true,
     bool resumeOnError = true,
+    String? baseUrl, // 直接指定 baseUrl（最高优先级）
+    String? service, // 使用 serviceBaseUrls 中定义的服务名称
   }) async {
     try {
       // 检查 path 是否是完整 URL
       final isAbsoluteUrl = _isAbsoluteUrl(path);
 
       // 如果是完整 URL，使用独立的 Dio 实例（不依赖 baseUrl 和拦截器）
-      // 如果是相对路径，使用配置的 Dio 实例
-      final dio = isAbsoluteUrl ? HttpUtil.createDio() : HttpUtil.dio;
+      // 如果是相对路径，解析 baseUrl 并使用对应的 Dio 实例
+      final dio = isAbsoluteUrl
+          ? HttpUtil.createDio()
+          : HttpUtil.instance._getDioForBaseUrl(
+              HttpUtilSafeCall._resolveBaseUrl(baseUrl, service),
+            );
 
       // 获取配置（用于请求头和错误处理）
       final config = HttpUtilSafeCall._config;
@@ -1305,6 +1483,8 @@ class _SSEManagerImpl extends SSEManager {
     dynamic data,
     Map<String, String>? queryParameters,
     Map<String, String>? headers,
+    String? baseUrl,
+    String? service,
     required void Function(SSEEvent event) onData,
     void Function(Object error)? onError,
     void Function()? onDone,
@@ -1327,9 +1507,12 @@ class _SSEManagerImpl extends SSEManager {
       throw StateError('HttpUtil 未配置，请先调用 HttpUtil.configure() 进行配置');
     }
 
+    // 解析 baseUrl
+    final resolvedBaseUrl = HttpUtilSafeCall._resolveBaseUrl(baseUrl, service);
+
     // 直接使用 SSEConnection.connect 建立连接
     final connection = await SSEConnection.connect(
-      baseUrl: config.baseUrl,
+      baseUrl: resolvedBaseUrl,
       path: path,
       method: method,
       data: data,

@@ -140,6 +140,35 @@ class HttpConfig {
   /// ```
   final QueueConfig? queueConfig;
 
+  /// 服务 baseUrl 映射（可选）
+  /// key: 服务名称（如 'files', 'cdn'），value: 对应的 baseUrl
+  ///
+  /// 示例：
+  /// ```dart
+  /// serviceBaseUrls: {
+  ///   'files': 'https://files.example.com',
+  ///   'cdn': 'https://cdn.example.com',
+  ///   'third-party': 'https://third-party.com/api',
+  /// }
+  /// ```
+  ///
+  /// 使用方式：
+  /// ```dart
+  /// // 使用默认 baseUrl
+  /// await http.send(method: hm.get, path: '/users');
+  ///
+  /// // 使用服务
+  /// await http.send(method: hm.post, path: '/upload', service: 'files');
+  ///
+  /// // 直接指定 baseUrl（最高优先级）
+  /// await http.send(
+  ///   method: hm.get,
+  ///   path: '/data',
+  ///   baseUrl: 'https://custom.example.com',
+  /// );
+  /// ```
+  final Map<String, String>? serviceBaseUrls;
+
   HttpConfig({
     required this.baseUrl,
     ResponseParser? responseParser, // 可选参数，默认使用 StandardResponseParser
@@ -155,6 +184,7 @@ class HttpConfig {
     this.loadingWidgetBuilder,
     this.deduplicationConfig,
     this.queueConfig,
+    this.serviceBaseUrls,
   }) : responseParser = responseParser ?? StandardResponseParser();
 }
 
