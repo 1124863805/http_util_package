@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.4] - 2026-01-15
+
+### Fixed
+- **修复 onSuccess/onFailure 方法中 loading 不关闭的问题**
+  - 修复了使用 `.onSuccess()` 或 `.onFailure()` 方法时，loading 提示无法自动关闭的问题
+  - 现在 `onSuccess` 和 `onFailure` 方法会在回调执行后自动关闭 loading 提示
+  - 这两个方法是链式调用的终点，不会继续发送新的请求，因此应该关闭 loading
+
+### 改进
+- 优化了 `onSuccess` 和 `onFailure` 方法的实现，确保 loading 提示能正确关闭
+- 使用 `Future.microtask` 确保在回调执行后再关闭 loading，避免时序问题
+
 ## [1.2.3] - 2026-01-15
 
 ### Fixed

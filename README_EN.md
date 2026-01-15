@@ -28,7 +28,7 @@ A powerful HTTP utility package based on Dio with configurable header injection 
 
 ```yaml
 dependencies:
-  dio_http_util: ^1.2.3
+  dio_http_util: ^1.2.4
 ```
 
 ## Quick Start
