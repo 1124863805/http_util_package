@@ -612,10 +612,12 @@ extension HttpUtilSafeCall on HttpUtil {
         // 注意：extractModel、extractField 等方法不再关闭 loading，统一由 finally 块或链式调用的最后一步关闭
         if (isLoading && loadingId != null && !isChainCallFlag) {
           Future.microtask(() {
-            // 再次检查 loadingId 是否仍然存在
+            // 再次检查 loadingId 是否仍然存在，并且确保不是链式调用
             // 如果用户只使用了 await http.send(isLoading: true)，这里会关闭 loading
             // 如果用户使用了 extractModel 等方法但没有后续链式调用，这里也会关闭 loading
             // 如果用户使用了 thenWith 等链式调用，loading 会由链式调用的最后一步关闭
+            // 关键：如果 _chainLoadingId 仍然存在且等于当前 loadingId，说明没有后续链式调用，可以关闭
+            // 如果 _chainLoadingId 已经被后续链式调用修改或清空，说明有链式调用，不应该关闭
             if (HttpUtil._chainLoadingId == loadingId) {
               _hideLoading(loadingId);
               HttpUtil._chainLoadingId = null;

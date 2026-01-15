@@ -595,18 +595,19 @@ extension ExtractedValueExtension<M> on Future<M?> {
     E? Function(Response<R> response)? extractor,
     M Function(M extracted, E? extractedValue)? updater,
   }) async {
+    // 关键修复：在 await this 之前检查 hasChainLoading，避免 finally 块中的 Future.microtask 清空 _chainLoadingId
+    // 这样即使 finally 块执行，也不会影响已保存的状态
+    final hasChainLoading = HttpUtilSafeCall.hasChainLoading();
+
     final extracted = await this;
     if (extracted == null) {
       // 注意：这里无法创建 ChainResult，因为 extracted 为 null
       // 检查是否有链式调用的加载提示，如果有则关闭
-      if (HttpUtilSafeCall.hasChainLoading()) {
+      if (hasChainLoading) {
         HttpUtilSafeCall.closeChainLoading();
       }
       throw StateError('提取的对象为 null，无法继续链式调用');
     }
-
-    // 检查是否已有链式调用的加载提示（由 http.isLoading.send() 创建）
-    final hasChainLoading = HttpUtilSafeCall.hasChainLoading();
 
     final response = await nextRequest(extracted);
 
@@ -648,17 +649,17 @@ extension ExtractedValueExtension<M> on Future<M?> {
     Future<Response<dynamic>> Function(M extracted) nextRequest,
     R? Function(Response<dynamic> response) finalExtractor,
   ) async {
+    // 关键修复：在 await this 之前检查 hasChainLoading，避免 finally 块中的 Future.microtask 清空 _chainLoadingId
+    final hasChainLoading = HttpUtilSafeCall.hasChainLoading();
+
     final extracted = await this;
     if (extracted == null) {
       // 检查是否有链式调用的加载提示，如果有则关闭
-      if (HttpUtilSafeCall.hasChainLoading()) {
+      if (hasChainLoading) {
         HttpUtilSafeCall.closeChainLoading();
       }
       return null;
     }
-
-    // 检查是否已有链式调用的加载提示
-    final hasChainLoading = HttpUtilSafeCall.hasChainLoading();
 
     final nextResponse = await nextRequest(extracted);
     if (!nextResponse.isSuccess) {
