@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.2] - 2026-01-15
+
+### 修复
+- **单次请求 loading 不关闭问题**
+  - 修复了单次请求（`await http.send(...)`）完成后 loading 不关闭的问题
+  - 优化了 loading 关闭逻辑，使用 `Future.microtask` 确保在扩展方法之后执行
+  - 修复了 `isChainCall` 标志的设置逻辑，单次请求不再错误地标记为链式调用
+  - 确保单次请求和使用扩展方法（如 `extractField`、`onSuccess`）都能正确关闭 loading
+
 ## [1.4.1] - 2026-01-15
 
 ### Added

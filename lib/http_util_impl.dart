@@ -533,13 +533,17 @@ extension HttpUtilSafeCall on HttpUtil {
               loadingId = HttpUtil._chainLoadingId;
               isChainCall = true;
             } else {
-              // 创建新的加载提示（可能是链式调用的第一步，也可能是单次请求）
-              // 先创建 loading，设置 _chainLoadingId，标记为链式调用
-              // 如果是单次请求，会在 finally 块中关闭并清理 _chainLoadingId
+              // 创建新的加载提示
+              // 注意：这里不设置 isChainCall = true，因为可能是单次请求
+              // 如果是链式调用的第一步，会在链式调用的扩展方法中设置 isChainCall
               loadingId = _showLoading(context, config);
               if (loadingId != null) {
+                // 先设置 _chainLoadingId，但不确定是否是链式调用
+                // 如果是单次请求，会在 finally 块中关闭并清理
+                // 如果是链式调用，会在链式调用的扩展方法中标记为链式调用
                 HttpUtil._chainLoadingId = loadingId;
-                isChainCall = true;
+                // 不设置 isChainCall = true，让 finally 块默认关闭 loading
+                // 如果是链式调用，链式调用的扩展方法会处理
               }
             }
           }
@@ -596,14 +600,17 @@ extension HttpUtilSafeCall on HttpUtil {
         // 所有异常都统一处理为网络错误
         return _handleNetworkError<T>();
       } finally {
-        // 如果不是链式调用，立即关闭加载提示并清理 _chainLoadingId
+        // 如果不是链式调用，延迟关闭加载提示并清理 _chainLoadingId
+        // 使用 Future.microtask 确保在扩展方法（如 extractField、onSuccess）之后执行
         // 如果是链式调用，加载提示会在整个链路结束时关闭
         if (isLoading && loadingId != null && !isChainCall) {
-          _hideLoading(loadingId);
-          // 清理 _chainLoadingId（如果是单次请求，确保清理）
-          if (HttpUtil._chainLoadingId == loadingId) {
-            HttpUtil._chainLoadingId = null;
-          }
+          Future.microtask(() {
+            // 再次检查 loadingId 是否仍然存在（可能已被扩展方法关闭）
+            if (HttpUtil._chainLoadingId == loadingId) {
+              _hideLoading(loadingId);
+              HttpUtil._chainLoadingId = null;
+            }
+          });
         }
       }
     }
