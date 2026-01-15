@@ -14,6 +14,7 @@ class SSEClient {
   final dynamic data; // 请求体数据（POST 请求时使用）
   final Map<String, String>? staticHeaders;
   final Future<Map<String, String>> Function()? dynamicHeaderBuilder;
+  final Map<String, String>? headers; // 特定请求的请求头（优先级最高）
   HttpClient? _httpClient;
   HttpClientRequest? _request;
   HttpClientResponse? _response;
@@ -33,6 +34,7 @@ class SSEClient {
     this.data,
     this.staticHeaders,
     this.dynamicHeaderBuilder,
+    this.headers,
   });
 
   /// 获取事件流
@@ -178,17 +180,24 @@ class SSEClient {
       _request!.headers.set('Content-Type', 'application/json');
     }
 
-    // 添加静态请求头
+    // 先添加静态请求头（优先级最低）
     if (staticHeaders != null) {
       staticHeaders!.forEach((key, value) {
         _request!.headers.set(key, value);
       });
     }
 
-    // 添加动态请求头
+    // 再添加动态请求头（优先级中等）
     if (dynamicHeaderBuilder != null) {
       final dynamicHeaders = await dynamicHeaderBuilder!();
       dynamicHeaders.forEach((key, value) {
+        _request!.headers.set(key, value);
+      });
+    }
+
+    // 最后添加特定请求头（优先级最高，会覆盖全局请求头）
+    if (headers != null) {
+      headers!.forEach((key, value) {
         _request!.headers.set(key, value);
       });
     }

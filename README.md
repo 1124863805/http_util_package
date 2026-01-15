@@ -28,7 +28,7 @@
 
 ```yaml
 dependencies:
-  dio_http_util: ^1.2.4
+  dio_http_util: ^1.2.6
 ```
 
 ## 快速开始
@@ -73,6 +73,7 @@ final response = await http.send(
   path: '/auth/login',
   data: {'email': 'user@example.com', 'code': '123456'},
   queryParameters: {'source': 'mobile'},  // 可选：查询参数
+  headers: {'X-Custom-Header': 'value'},  // 可选：特定请求头，会覆盖全局同名请求头
 );
 
 // 处理响应（错误已自动处理并提示，直接提取数据即可）
@@ -100,9 +101,13 @@ if (token != null) saveToken(token);
 - `path` - 请求路径（必需）
 - `data` - 请求体数据（可选）
 - `queryParameters` - URL 查询参数（可选）
-
-**send 方法新增参数：**
 - `isLoading` - 是否显示加载提示（默认 false），如果为 true 且配置了 `contextGetter`，将自动显示加载提示
+- `headers` - 特定请求的请求头（可选），会与全局请求头合并，如果键相同则覆盖全局请求头
+
+**请求头优先级（从低到高）：**
+1. 静态请求头（`staticHeaders`）- 优先级最低
+2. 动态请求头（`dynamicHeaderBuilder`）- 优先级中等
+3. 特定请求头（`headers` 参数）- 优先级最高，会覆盖全局同名请求头
 
 **说明：**
 - 如果响应失败（`isSuccess == false`），工具类会自动调用 `onError` 回调显示错误提示
@@ -216,6 +221,40 @@ final response = await http.send(
 ```
 
 **注意：** 在链式调用中，只需在第一步设置 `isLoading: true`，整个链路会共享一个加载提示。详见 [链式调用中的加载提示管理](#链式调用中的加载提示管理)。
+
+### 特定请求的请求头
+
+如果某个接口需要特定的请求头，而不是全局的，可以使用 `headers` 参数：
+
+```dart
+// 某个接口需要特定的请求头
+final response = await http.send(
+  method: hm.post,
+  path: '/special-endpoint',
+  data: {'key': 'value'},
+  headers: {
+    'X-Custom-Header': 'custom-value',
+    'X-API-Version': '2.0',
+  }, // 特定请求头，会覆盖全局同名请求头
+);
+
+// 链式调用中也支持
+final result = await http.send(
+  method: hm.post,
+  path: '/api/step1',
+  headers: {'X-Step': '1'}, // 第一步的特定请求头
+)
+.thenWith((prevResult) => http.send(
+  method: hm.post,
+  path: '/api/step2',
+  headers: {'X-Step': '2'}, // 第二步的特定请求头
+));
+```
+
+**请求头优先级：**
+- 特定请求头（`headers` 参数）优先级最高，会覆盖全局同名请求头
+- 动态请求头（`dynamicHeaderBuilder`）优先级中等
+- 静态请求头（`staticHeaders`）优先级最低
 
 ### 自定义加载提示 UI
 
@@ -706,6 +745,7 @@ final customDio = HttpUtil.createDio(
 - `contentType` - Content-Type（可选，Dio 会根据文件名自动推断）
 - `additionalData` - 额外的表单数据（除了文件之外的其他字段）
 - `queryParameters` - URL 查询参数
+- `headers` - 特定请求的请求头（可选），会与全局请求头合并，如果键相同则覆盖全局请求头
 - `onProgress` - 上传进度回调 `(sent, total) => void`
 - `cancelToken` - 取消令牌，用于取消上传操作
 
@@ -725,6 +765,7 @@ final response = await http.uploadFile<String>(
   fieldName: 'avatar',
   additionalData: {'userId': '123'},
   queryParameters: {'category': 'avatar'},  // 查询参数
+  headers: {'X-Upload-Type': 'avatar'},  // 特定请求头
   onProgress: (sent, total) {
     print('上传进度: ${(sent / total * 100).toStringAsFixed(1)}%');
   },
@@ -822,6 +863,7 @@ final response = await http.uploadFiles<String>(
   ],
   additionalData: {'albumId': '456', 'description': 'My photos'},
   queryParameters: {'albumType': 'photo'},  // 查询参数
+  headers: {'X-Upload-Type': 'batch'},  // 特定请求头
   onProgress: (sent, total) {
     print('上传进度: ${(sent / total * 100).toStringAsFixed(1)}%');
   },
@@ -990,6 +1032,7 @@ await manager.connect(
   path: '/ai/chat/stream',
   method: 'POST',
   data: {'question': '你好'},
+  headers: {'X-Custom-Header': 'value'},  // 特定请求头（可选）
   onData: (event) {
     print('收到事件: ${event.data}');
   },
@@ -1015,6 +1058,7 @@ await manager.connect(
   path: '/ai/chat/stream',
   method: 'POST',
   data: {'question': '你好'},
+  headers: {'X-Chat-Type': 'ai'},  // 特定请求头（可选）
   onData: (event) => print('聊天: ${event.data}'),
 );
 
@@ -1022,6 +1066,7 @@ await manager.connect(
 await manager.connect(
   id: 'notifications',
   path: '/notifications/stream',
+  headers: {'X-Notification-Type': 'push'},  // 特定请求头（可选）
   onData: (event) => print('通知: ${event.data}'),
 );
 

@@ -27,6 +27,7 @@ class SSEManager {
   /// [method] HTTP 方法，默认为 'GET'
   /// [data] 请求体数据（POST 请求时使用）
   /// [queryParameters] URL 查询参数
+  /// [headers] 特定请求的请求头（可选），会与全局请求头合并，如果键相同则覆盖全局请求头
   /// [onData] 数据回调
   /// [onError] 错误回调（可选）
   /// [onDone] 完成回调（可选）
@@ -44,6 +45,7 @@ class SSEManager {
   ///   path: '/ai/chat/stream',
   ///   method: 'POST',
   ///   data: {'question': '你好'},
+  ///   headers: {'X-Custom-Header': 'value'}, // 特定请求头
   ///   onData: (event) => print('聊天: ${event.data}'),
   /// );
   ///
@@ -60,6 +62,7 @@ class SSEManager {
     String method = 'GET',
     dynamic data,
     Map<String, String>? queryParameters,
+    Map<String, String>? headers,
     required void Function(SSEEvent event) onData,
     void Function(Object error)? onError,
     void Function()? onDone,

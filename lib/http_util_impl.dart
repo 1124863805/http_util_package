@@ -71,16 +71,23 @@ class HttpUtil {
         _dioInstance!.interceptors.add(
           dio_package.InterceptorsWrapper(
             onRequest: (options, handler) async {
-              // 添加静态请求头
+              // 保存特定请求的请求头（通过 options.headers 传递的，优先级最高）
+              final specificHeaders =
+                  Map<String, dynamic>.from(options.headers);
+
+              // 先添加静态请求头（优先级最低）
               if (_config!.staticHeaders != null) {
                 options.headers.addAll(_config!.staticHeaders!);
               }
 
-              // 添加动态请求头
+              // 再添加动态请求头（优先级中等）
               if (_config!.dynamicHeaderBuilder != null) {
                 final dynamicHeaders = await _config!.dynamicHeaderBuilder!();
                 options.headers.addAll(dynamicHeaders);
               }
+
+              // 最后添加特定请求头（优先级最高，会覆盖全局请求头）
+              options.headers.addAll(specificHeaders);
 
               return handler.next(options);
             },
@@ -297,10 +304,16 @@ extension HttpUtilSafeCall on HttpUtil {
   /// [method] 请求方式：必须使用 hm.get、hm.post 等常量
   /// [isLoading] 是否显示加载提示（默认 false）
   /// 如果为 true 且配置了 contextGetter，将自动显示加载提示
+  /// [headers] 特定请求的请求头（可选），会与全局请求头合并，如果键相同则覆盖全局请求头
   ///
   /// **链式调用中的加载提示**：
   /// 如果在链式调用中第一步设置了 `isLoading: true`，整个链路只会显示一个加载提示
   /// 加载提示会在整个链路结束时（成功或失败）自动关闭
+  ///
+  /// **请求头优先级**：
+  /// 1. 特定请求的 headers（最高优先级，会覆盖全局请求头）
+  /// 2. 动态请求头（dynamicHeaderBuilder）
+  /// 3. 静态请求头（staticHeaders）
   ///
   /// 示例（链式调用）：
   /// ```dart
@@ -313,12 +326,24 @@ extension HttpUtilSafeCall on HttpUtil {
   /// .extractModel<FileUploadResult>(FileUploadResult.fromConfigJson)
   /// .thenWith((uploadResult) => http.uploadToUrlResponse(...)); // 后续步骤不需要设置 isLoading
   /// ```
+  ///
+  /// 示例（特定请求头）：
+  /// ```dart
+  /// // 某个接口需要特定的请求头
+  /// final response = await http.send(
+  ///   method: hm.post,
+  ///   path: '/special-endpoint',
+  ///   data: {'key': 'value'},
+  ///   headers: {'X-Custom-Header': 'custom-value'}, // 特定请求头，会覆盖全局同名请求头
+  /// );
+  /// ```
   Future<Response<T>> send<T>({
     required String method,
     required String path,
     dynamic data,
     Map<String, dynamic>? queryParameters,
     bool isLoading = false,
+    Map<String, String>? headers,
   }) async {
     String? loadingId;
     bool isChainCall = false;
@@ -349,12 +374,19 @@ extension HttpUtilSafeCall on HttpUtil {
     }
 
     try {
+      // 构建请求选项，包含特定请求头
+      dio_package.Options? options;
+      if (headers != null && headers.isNotEmpty) {
+        options = dio_package.Options(headers: headers);
+      }
+
       // 直接调用 request 方法获取原始 response
       final rawResponse = await HttpUtil.instance.request<T>(
         method: method,
         path: path,
         data: data,
         queryParameters: queryParameters,
+        options: options,
       );
 
       // 检查 500 错误
@@ -412,6 +444,7 @@ extension HttpUtilFileUpload on HttpUtil {
   /// [queryParameters] URL 查询参数
   /// [onProgress] 上传进度回调 (已上传字节数, 总字节数)
   /// [cancelToken] 取消令牌
+  /// [headers] 特定请求的请求头（可选），会与全局请求头合并，如果键相同则覆盖全局请求头
   ///
   /// 示例：
   /// ```dart
@@ -420,6 +453,7 @@ extension HttpUtilFileUpload on HttpUtil {
   ///   file: File('/path/to/image.jpg'),
   ///   fieldName: 'avatar',
   ///   additionalData: {'userId': '123'},
+  ///   headers: {'X-Upload-Type': 'avatar'}, // 特定请求头
   ///   onProgress: (sent, total) {
   ///     print('上传进度: ${(sent / total * 100).toStringAsFixed(1)}%');
   ///   },
@@ -435,6 +469,7 @@ extension HttpUtilFileUpload on HttpUtil {
     Map<String, dynamic>? queryParameters,
     void Function(int sent, int total)? onProgress,
     dio_package.CancelToken? cancelToken,
+    Map<String, String>? headers,
   }) async {
     // 将 file 参数转换为 UploadFile
     UploadFile uploadFile;
@@ -470,6 +505,7 @@ extension HttpUtilFileUpload on HttpUtil {
       queryParameters: queryParameters,
       onProgress: onProgress,
       cancelToken: cancelToken,
+      headers: headers,
     );
   }
 
@@ -481,6 +517,7 @@ extension HttpUtilFileUpload on HttpUtil {
   /// [queryParameters] URL 查询参数
   /// [onProgress] 上传进度回调 (已上传字节数, 总字节数)
   /// [cancelToken] 取消令牌
+  /// [headers] 特定请求的请求头（可选），会与全局请求头合并，如果键相同则覆盖全局请求头
   ///
   /// 示例：
   /// ```dart
@@ -491,6 +528,7 @@ extension HttpUtilFileUpload on HttpUtil {
   ///     UploadFile(file: File('/path/to/file2.jpg'), fieldName: 'images[]'),
   ///   ],
   ///   additionalData: {'albumId': '456'},
+  ///   headers: {'X-Upload-Type': 'batch'}, // 特定请求头
   ///   onProgress: (sent, total) {
   ///     print('上传进度: ${(sent / total * 100).toStringAsFixed(1)}%');
   ///   },
@@ -503,6 +541,7 @@ extension HttpUtilFileUpload on HttpUtil {
     Map<String, dynamic>? queryParameters,
     void Function(int sent, int total)? onProgress,
     dio_package.CancelToken? cancelToken,
+    Map<String, String>? headers,
   }) async {
     // 验证文件列表不为空
     if (files.isEmpty) {
@@ -536,12 +575,19 @@ extension HttpUtilFileUpload on HttpUtil {
         };
       }
 
+      // 构建请求选项，包含特定请求头
+      dio_package.Options? options;
+      if (headers != null && headers.isNotEmpty) {
+        options = dio_package.Options(headers: headers);
+      }
+
       // 调用 request 方法以支持进度回调
       final rawResponse = await HttpUtil.instance.request<T>(
         method: hm.post,
         path: path,
         data: formData,
         queryParameters: queryParameters,
+        options: options,
         onSendProgress: dioProgressCallback,
         cancelToken: cancelToken,
       );
@@ -849,6 +895,7 @@ class _SSEManagerImpl extends SSEManager {
     String method = 'GET',
     dynamic data,
     Map<String, String>? queryParameters,
+    Map<String, String>? headers,
     required void Function(SSEEvent event) onData,
     void Function(Object error)? onError,
     void Function()? onDone,
@@ -880,6 +927,7 @@ class _SSEManagerImpl extends SSEManager {
       queryParameters: queryParameters,
       staticHeaders: config.staticHeaders,
       dynamicHeaderBuilder: config.dynamicHeaderBuilder,
+      headers: headers,
     );
 
     // 监听事件

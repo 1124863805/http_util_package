@@ -28,7 +28,7 @@ A powerful HTTP utility package based on Dio with configurable header injection 
 
 ```yaml
 dependencies:
-  dio_http_util: ^1.2.4
+  dio_http_util: ^1.2.6
 ```
 
 ## Quick Start
@@ -104,6 +104,12 @@ if (token != null) saveToken(token);
 - `data` - Request body data (optional)
 - `queryParameters` - URL query parameters (optional)
 - `isLoading` - Whether to show loading indicator (default false)
+- `headers` - Request-specific headers (optional), will be merged with global headers, and will override global headers if keys are the same
+
+**Header priority (from low to high):**
+1. Static headers (`staticHeaders`) - lowest priority
+2. Dynamic headers (`dynamicHeaderBuilder`) - medium priority
+3. Request-specific headers (`headers` parameter) - highest priority, will override global headers with the same key
 
 **Notes:**
 - If response fails (`isSuccess == false`), the tool will automatically call `onError` callback to show error prompt
@@ -217,6 +223,40 @@ final response = await http.send(
 ```
 
 **Note:** In chain calls, you only need to set `isLoading: true` in the first step, and the entire chain will share one loading indicator. See [Loading Indicator Management in Chain Calls](#loading-indicator-management-in-chain-calls) for details.
+
+### Request-Specific Headers
+
+If a specific endpoint requires specific headers instead of global ones, you can use the `headers` parameter:
+
+```dart
+// A specific endpoint requires specific headers
+final response = await http.send(
+  method: hm.post,
+  path: '/special-endpoint',
+  data: {'key': 'value'},
+  headers: {
+    'X-Custom-Header': 'custom-value',
+    'X-API-Version': '2.0',
+  }, // Request-specific headers, will override global headers with the same key
+);
+
+// Also supported in chain calls
+final result = await http.send(
+  method: hm.post,
+  path: '/api/step1',
+  headers: {'X-Step': '1'}, // Step 1 specific headers
+)
+.thenWith((prevResult) => http.send(
+  method: hm.post,
+  path: '/api/step2',
+  headers: {'X-Step': '2'}, // Step 2 specific headers
+));
+```
+
+**Header priority:**
+- Request-specific headers (`headers` parameter) have the highest priority and will override global headers with the same key
+- Dynamic headers (`dynamicHeaderBuilder`) have medium priority
+- Static headers (`staticHeaders`) have the lowest priority
 
 ### Custom Loading Indicator UI
 

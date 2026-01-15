@@ -2,8 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.6] - 2024-XX-XX
+
+### Added
+- Added `headers` parameter support to `uploadFile()` method for request-specific headers
+- Added `headers` parameter support to `uploadFiles()` method for request-specific headers
+- Added `headers` parameter support to `sseManager().connect()` method for request-specific headers in SSE connections
+
+### Changed
+- Updated documentation to include `headers` parameter examples for file upload and SSE methods
+
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.2.5] - 2026-01-15
+
+### Added
+- **支持特定请求的请求头**
+  - 在 `send` 方法中添加了 `headers` 参数，支持为单个请求设置特定的请求头
+  - 特定请求头会与全局请求头合并，如果键相同则覆盖全局请求头
+  - 请求头优先级：特定请求头 > 动态请求头 > 静态请求头
+  - 支持在链式调用中为每个步骤设置不同的请求头
+
+### 改进
+- 优化了请求拦截器的逻辑，确保特定请求头的优先级最高
+- 更新了文档，添加了特定请求头的使用示例和说明
 
 ## [1.2.4] - 2026-01-15
 

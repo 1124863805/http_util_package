@@ -26,6 +26,7 @@ class SSEConnection {
   /// [queryParameters] URL 查询参数
   /// [staticHeaders] 静态请求头
   /// [dynamicHeaderBuilder] 动态请求头构建器
+  /// [headers] 特定请求的请求头（可选），会与全局请求头合并，如果键相同则覆盖全局请求头
   ///
   /// 返回已连接的 SSEConnection，可以直接监听事件
   static Future<SSEConnection> connect({
@@ -36,6 +37,7 @@ class SSEConnection {
     Map<String, String>? queryParameters,
     Map<String, String>? staticHeaders,
     Future<Map<String, String>> Function()? dynamicHeaderBuilder,
+    Map<String, String>? headers,
   }) async {
     final client = SSEClient(
       baseUrl: baseUrl,
@@ -45,6 +47,7 @@ class SSEConnection {
       queryParameters: queryParameters,
       staticHeaders: staticHeaders,
       dynamicHeaderBuilder: dynamicHeaderBuilder,
+      headers: headers,
     );
 
     final connection = SSEConnection._(client);
