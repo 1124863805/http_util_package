@@ -286,7 +286,16 @@ extension FutureResponseExtension<T> on Future<Response<T>> {
   /// ```
   Future<Response<T>> onSuccess(VoidCallback callback) async {
     final response = await this;
-    return response.onSuccess(callback);
+    final result = response.onSuccess(callback);
+    // 如果这是单次请求（使用了 onSuccess 但没有后续链式调用），需要关闭 loading
+    // 检查是否有 chain loading，如果有且这是最后一个操作，关闭它
+    if (HttpUtilSafeCall.hasChainLoading()) {
+      // 使用 Future.microtask 确保在回调执行后再关闭 loading
+      Future.microtask(() {
+        HttpUtilSafeCall.closeChainLoading();
+      });
+    }
+    return result;
   }
 
   /// 等待响应完成后，失败时执行回调
@@ -298,7 +307,16 @@ extension FutureResponseExtension<T> on Future<Response<T>> {
   /// ```
   Future<Response<T>> onFailure(Function(String) callback) async {
     final response = await this;
-    return response.onFailure(callback);
+    final result = response.onFailure(callback);
+    // 如果这是单次请求（使用了 onFailure 但没有后续链式调用），需要关闭 loading
+    // 检查是否有 chain loading，如果有且这是最后一个操作，关闭它
+    if (HttpUtilSafeCall.hasChainLoading()) {
+      // 使用 Future.microtask 确保在回调执行后再关闭 loading
+      Future.microtask(() {
+        HttpUtilSafeCall.closeChainLoading();
+      });
+    }
+    return result;
   }
 
   /// 链式调用下一个请求（支持传递前一个请求的 Response）
