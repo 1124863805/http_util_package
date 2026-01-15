@@ -99,6 +99,7 @@ class ChatController extends GetxController {
         method: 'POST',
         data: {'question': '什么是八字？'},
         onData: (event) {
+          print('🔹 连接1收到数据: ${event.data}');
           sseMessage1.value += event.data;
         },
         onError: (error) {
@@ -108,6 +109,9 @@ class ChatController extends GetxController {
             '连接1错误: $error',
             snackPosition: SnackPosition.BOTTOM,
           );
+        },
+        onDone: () {
+          print('🔹 连接1完成');
         },
       );
 
@@ -128,6 +132,9 @@ class ChatController extends GetxController {
             snackPosition: SnackPosition.BOTTOM,
           );
         },
+        onDone: () {
+          print('🔹 连接2完成');
+        },
       );
 
       // 连接 3：调用 /ai/chat/stream，八字问题3
@@ -147,11 +154,30 @@ class ChatController extends GetxController {
             snackPosition: SnackPosition.BOTTOM,
           );
         },
+        onDone: () {
+          print('🔹 连接3完成');
+        },
       );
+
+      // 等待所有连接完成（在后台执行，不阻塞 UI）
+      _waitForAllConnectionsDone();
     } catch (e) {
       print('❌ 多连接失败: $e');
       isMultipleSSEConnected.value = false;
       Get.snackbar('错误', '多连接失败: $e', snackPosition: SnackPosition.BOTTOM);
+    }
+  }
+
+  /// 等待所有连接完成（后台执行）
+  Future<void> _waitForAllConnectionsDone() async {
+    try {
+      // 等待所有连接完成
+      await _sseManager?.waitForAllConnectionsDone();
+      print('✅ 所有连接都已完成');
+      isMultipleSSEConnected.value = false;
+      Get.snackbar('完成', '所有 SSE 连接都已完成', snackPosition: SnackPosition.BOTTOM);
+    } catch (e) {
+      print('❌ 等待连接完成时出错: $e');
     }
   }
 
