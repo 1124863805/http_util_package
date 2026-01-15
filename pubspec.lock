@@ -159,7 +159,7 @@ packages:
       path: "../http_util_package"
       relative: true
     source: path
-    version: "1.1.0"
+    version: "1.4.4"
   dio_web_adapter:
     dependency: transitive
     description:

@@ -6,6 +6,7 @@ import '../services/locale_service.dart';
 import 'user_agent_util.dart';
 import 'auth_util.dart';
 import '../../generated/locale_keys.g.dart';
+import '../routes/app_pages.dart' show Routes;
 // 不再需要导入 standard_response_parser.dart，因为默认使用它
 
 /// HTTP 工具类适配器
@@ -48,9 +49,32 @@ class HttpAdapter {
           return headers;
         },
         networkErrorKey: LocaleKeys.network_error_retry,
-        onError: (String message) {
+        // 401 专门处理，自动去重（5秒内只处理一次）
+        on401Unauthorized: () {
+          // 清除登录信息
+          AuthUtil.clearLoginInfo();
+          // 跳转到登录页
+          Get.offAllNamed(Routes.LOGIN);
+          // 显示提示
           final context = Get.context;
           if (context != null) {
+            final titleText = context.tr(LocaleKeys.tip);
+            Get.snackbar(
+              titleText,
+              '登录已过期，请重新登录',
+              snackPosition: SnackPosition.BOTTOM,
+            );
+          }
+        },
+        // 处理其他错误（非 401）
+        onFailure: (int? httpStatusCode, int? errorCode, String message) {
+          // 打印错误信息，方便调试
+          print(
+            '🔍 [错误信息] HTTP 状态码: $httpStatusCode, 业务错误码: $errorCode, 错误消息: $message',
+          );
+          final context = Get.context;
+          if (context != null) {
+            // 可以根据 httpStatusCode 和 errorCode 执行不同的业务逻辑
             // message 可能是国际化键，需要翻译
             // 如果传入的是键，则翻译；如果是文本，则直接使用
             final titleText = context.tr(LocaleKeys.tip);

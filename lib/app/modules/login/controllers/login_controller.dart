@@ -5,7 +5,6 @@ import '../../../routes/app_pages.dart';
 import 'package:dio_http_util/http_util.dart';
 import '../../../../app/utils/auth_util.dart';
 import '../../../../app/utils/form_validator.dart';
-import '../../../../app/utils/auth_util.dart';
 
 class LoginController extends GetxController {
   final emailController = TextEditingController();
@@ -67,9 +66,16 @@ class LoginController extends GetxController {
           data: {"email": email, "code": code},
           isLoading: true,
         )
-        .onFailure((error) {
-          Get.snackbar('登录失败', error, snackPosition: SnackPosition.BOTTOM);
-        })
+        // .onFailure((httpStatusCode, errorCode, message) {
+        //   // 打印错误信息，方便调试
+        //   print(
+        //     '🔍 [登录错误] HTTP 状态码: $httpStatusCode, 业务错误码: $errorCode, 错误消息: $message',
+        //   );
+        //   // 可以根据 httpStatusCode 和 errorCode 执行不同的业务逻辑
+        //   // 例如：httpStatusCode == 401 表示 HTTP 未授权
+        //   // 例如：errorCode == 1001 表示业务错误码 1001
+        //   Get.snackbar('登录失败', message, snackPosition: SnackPosition.BOTTOM);
+        // })
         .extractModel<TokenInfo>(TokenInfo.fromJson);
 
     // 失败时已经自动提示了，这里只处理成功的情况
