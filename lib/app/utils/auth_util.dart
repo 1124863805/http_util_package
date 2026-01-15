@@ -1,5 +1,30 @@
 import 'package:get_storage/get_storage.dart';
 
+class TokenInfo {
+  String? uid;
+  String? accessToken;
+  String? refreshToken;
+  int? expiresIn;
+
+  TokenInfo({this.uid, this.accessToken, this.refreshToken, this.expiresIn});
+
+  TokenInfo.fromJson(Map<String, dynamic> json) {
+    uid = json['uid'];
+    accessToken = json['accessToken'];
+    refreshToken = json['refreshToken'];
+    expiresIn = json['expiresIn'];
+  }
+
+  Map<String, dynamic> toJson() {
+    final Map<String, dynamic> data = new Map<String, dynamic>();
+    data['uid'] = this.uid;
+    data['accessToken'] = this.accessToken;
+    data['refreshToken'] = this.refreshToken;
+    data['expiresIn'] = this.expiresIn;
+    return data;
+  }
+}
+
 /// 认证工具类
 /// 统一管理用户登录信息和 Token
 class AuthUtil {

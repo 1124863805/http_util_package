@@ -5,6 +5,7 @@ import '../../../routes/app_pages.dart';
 import 'package:dio_http_util/http_util.dart';
 import '../../../../app/utils/auth_util.dart';
 import '../../../../app/utils/form_validator.dart';
+import '../../../../app/utils/auth_util.dart';
 
 class LoginController extends GetxController {
   final emailController = TextEditingController();
@@ -58,30 +59,27 @@ class LoginController extends GetxController {
     final email = emailController.text.trim();
     final code = codeController.text.trim();
 
-    final response = await http.send(
-      method: hm.post,
-      path: '/auth/login/email',
-      data: {"email": email, "code": code},
-      isLoading: true,
-    );
-
-    print('🔹 登录响应: ${response.data}');
-
     // 使用链式调用和 extractField，更简洁优雅
-    // final accessToken = await http
-    //     .send(
-    //       method: hm.post,
-    //       path: '/auth/login/email',
-    //       data: {"email": email, "code": code},
-    //       isLoading: true,
-    //     )
-    //     .extractField<String>('accessToken');
+    final tokenInfo = await http
+        .send(
+          method: hm.post,
+          path: '/auth/login/email',
+          data: {"email": email, "code": code},
+          isLoading: true,
+        )
+        .onFailure((error) {
+          Get.snackbar('登录失败', error, snackPosition: SnackPosition.BOTTOM);
+        })
+        .extractModel<TokenInfo>(TokenInfo.fromJson);
 
-    // // 失败时已经自动提示了，这里只处理成功的情况
-    // if (accessToken != null && accessToken.isNotEmpty) {
-    //   await AuthUtil.saveLoginInfo(accessToken: accessToken, email: email);
-    //   // 业务逻辑：登录成功跳转，不提示（或者可以在这里自定义提示）
-    //   Get.offAllNamed(Routes.MAIN);
-    // }
+    // 失败时已经自动提示了，这里只处理成功的情况
+    if (tokenInfo != null) {
+      await AuthUtil.saveLoginInfo(
+        accessToken: tokenInfo.accessToken!,
+        email: email,
+      );
+      // 业务逻辑：登录成功跳转，不提示（或者可以在这里自定义提示）
+      Get.offAllNamed(Routes.MAIN);
+    }
   }
 }
