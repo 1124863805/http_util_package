@@ -117,6 +117,11 @@ if (token != null) saveToken(token);
 - `baseUrl` - 直接指定 baseUrl（可选，最高优先级），会覆盖默认 baseUrl 和服务配置
 - `service` - 使用 `serviceBaseUrls` 中定义的服务名称（可选），如 'files'、'cdn' 等
 
+**http.isLoading getter（链式调用推荐）：**
+- `http.isLoading` - 返回 `HttpUtilWithLoading` 实例，用于链式调用
+- `http.isLoading.send(...)` - 明确标记链式调用，整个链路共享一个 loading，优先级高于 `isLoading: true` 参数
+- 推荐在链式调用中使用 `http.isLoading.send()`，单次请求使用 `http.send(isLoading: true)`
+
 **请求头优先级（从低到高）：**
 1. 静态请求头（`staticHeaders`）- 优先级最低
 2. 动态请求头（`dynamicHeaderBuilder`）- 优先级中等
@@ -341,7 +346,7 @@ HttpUtil.configure(
 
 ### 使用加载提示
 
-在请求时设置 `isLoading: true`：
+**单次请求**：使用 `isLoading: true` 参数
 
 ```dart
 // 自动显示/隐藏加载提示
@@ -349,11 +354,26 @@ final response = await http.send(
   method: hm.post,
   path: '/auth/login',
   data: {'email': 'user@example.com'},
-  isLoading: true, // 自动显示加载提示
+  isLoading: true, // 自动显示加载提示，请求完成后自动关闭
 );
 ```
 
-**注意：** 在链式调用中，只需在第一步设置 `isLoading: true`，整个链路会共享一个加载提示。详见 [链式调用中的加载提示管理](#链式调用中的加载提示管理)。
+**链式调用（推荐）**：使用 `http.isLoading.send()` 方式
+
+```dart
+// 使用 http.isLoading.send() 明确标记链式调用，整个链路共享一个 loading
+final result = await http.isLoading
+  .send(method: hm.post, path: '/api/upload', data: {...})
+  .extractModel<FileUploadResult>(FileUploadResult.fromConfigJson)
+  .thenWith((uploadResult) => http.uploadToUrlResponse(...))
+  .thenWithUpdate<String>(...);
+// 整个链路结束时，loading 自动关闭
+```
+
+**注意：** 
+- 单次请求：使用 `http.send(isLoading: true)`
+- 链式调用：推荐使用 `http.isLoading.send()`，优先级高于 `isLoading: true` 参数
+- 详见 [链式调用中的加载提示管理](#链式调用中的加载提示管理)
 
 ### 特定请求的请求头
 
@@ -447,9 +467,41 @@ final result2 = await http.send(...)
 
 ### 链式调用中的加载提示管理
 
-在链式调用中，如果第一步设置了 `isLoading: true`，整个链路只会显示**一个**加载提示，加载提示会在整个链路结束时（成功或失败）自动关闭。
+在链式调用中，推荐使用 `http.isLoading.send()` 方式，整个链路只会显示**一个**加载提示，加载提示会在整个链路结束时（成功或失败）自动关闭。
 
-**使用方式：**
+**推荐方式（使用 `http.isLoading.send()`）：**
+
+```dart
+// 使用 http.isLoading.send() 明确标记链式调用，整个链路共享一个加载提示
+final result = await http.isLoading
+  .send(
+    method: hm.post,
+    path: '/uploader/generate',
+    data: {'ext': 'jpg'},
+  )
+  .extractModel<FileUploadResult>(FileUploadResult.fromConfigJson)
+  .thenWith(
+    (uploadResult) => http.uploadToUrlResponse(
+      uploadUrl: uploadResult.uploadUrl,
+      file: file,
+      method: 'PUT',
+      // 不需要设置 isLoading，会自动复用链路的加载提示
+    ),
+  )
+  .thenWithUpdate<String>(
+    (uploadResult, uploadResponse) => http.send(
+      method: hm.post,
+      path: '/uploader/get-image-url',
+      data: {'image_key': uploadResult.imageKey},
+      // 不需要设置 isLoading，会自动复用链路的加载提示
+    ),
+    (response) => response.extractField<String>('image_url'),
+    (uploadResult, imageUrl) => uploadResult.copyWith(imageUrl: imageUrl),
+  );
+// 整个链路结束时，加载提示自动关闭
+```
+
+**传统方式（使用 `isLoading: true` 参数）：**
 
 ```dart
 // 第一步设置 isLoading: true，整个链路共享一个加载提示
@@ -482,8 +534,8 @@ final result = await http.send(
 ```
 
 **优势：**
-- ✅ 只需在第一步设置 `isLoading: true`
-- ✅ 后续步骤自动继承，无需重复设置
+- ✅ **推荐使用 `http.isLoading.send()`**：明确标记链式调用，优先级更高，避免 loading 过早关闭
+- ✅ 只需在第一步设置，后续步骤自动继承，无需重复设置
 - ✅ 整个链路只显示一个加载提示，避免闪烁
 - ✅ 链路结束时自动关闭，无需手动管理
 

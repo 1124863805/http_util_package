@@ -446,7 +446,7 @@ extension HttpUtilSafeCall on HttpUtil {
   /// [headers] 特定请求的请求头（可选），会与全局请求头合并，如果键相同则覆盖全局请求头
   ///
   /// **链式调用中的加载提示**：
-  /// 如果在链式调用中第一步设置了 `isLoading: true`，整个链路只会显示一个加载提示
+  /// 推荐使用 `http.isLoading.send()` 来明确标记链式调用，整个链路共享一个加载提示
   /// 加载提示会在整个链路结束时（成功或失败）自动关闭
   ///
   /// **请求头优先级**：
@@ -454,16 +454,25 @@ extension HttpUtilSafeCall on HttpUtil {
   /// 2. 动态请求头（dynamicHeaderBuilder）
   /// 3. 静态请求头（staticHeaders）
   ///
-  /// 示例（链式调用）：
+  /// 示例（链式调用，推荐方式）：
   /// ```dart
-  /// final result = await http.send(
+  /// final result = await http.isLoading
+  ///   .send(
+  ///     method: hm.post,
+  ///     path: '/uploader/generate',
+  ///     data: {'ext': 'jpg'},
+  ///   )
+  ///   .extractModel<FileUploadResult>(FileUploadResult.fromConfigJson)
+  ///   .thenWith((uploadResult) => http.uploadToUrlResponse(...));
+  /// ```
+  ///
+  /// 示例（单次请求）：
+  /// ```dart
+  /// final response = await http.send(
   ///   method: hm.post,
-  ///   path: '/uploader/generate',
-  ///   data: {'ext': 'jpg'},
-  ///   isLoading: true, // 第一步设置 isLoading，整个链路共享一个加载提示
-  /// )
-  /// .extractModel<FileUploadResult>(FileUploadResult.fromConfigJson)
-  /// .thenWith((uploadResult) => http.uploadToUrlResponse(...)); // 后续步骤不需要设置 isLoading
+  ///   path: '/auth/login',
+  ///   isLoading: true, // 单次请求，请求完成后自动关闭 loading
+  /// );
   /// ```
   ///
   /// 示例（特定请求头）：
@@ -515,11 +524,12 @@ extension HttpUtilSafeCall on HttpUtil {
     bool skipQueue = false,
     String? baseUrl, // 直接指定 baseUrl（最高优先级）
     String? service, // 使用 serviceBaseUrls 中定义的服务名称
+    bool isChainCall = false, // 内部参数：标记是否为链式调用（由 isLoading getter 使用）
   }) async {
     // 实际执行请求的函数
     Future<Response<T>> executeRequest() async {
       String? loadingId;
-      bool isChainCall = false;
+      bool isChainCallFlag = isChainCall; // 使用参数传入的 isChainCall
 
       // 如果需要显示加载提示
       if (isLoading) {
@@ -531,19 +541,15 @@ extension HttpUtilSafeCall on HttpUtil {
             if (HttpUtil._chainLoadingId != null) {
               // 链式调用中已有加载提示，复用现有的
               loadingId = HttpUtil._chainLoadingId;
-              isChainCall = true;
+              isChainCallFlag = true;
             } else {
               // 创建新的加载提示
-              // 注意：这里不设置 isChainCall = true，因为可能是单次请求
-              // 如果是链式调用的第一步，会在链式调用的扩展方法中设置 isChainCall
               loadingId = _showLoading(context, config);
               if (loadingId != null) {
-                // 先设置 _chainLoadingId，但不确定是否是链式调用
-                // 如果是单次请求，会在 finally 块中关闭并清理
-                // 如果是链式调用，会在链式调用的扩展方法中标记为链式调用
                 HttpUtil._chainLoadingId = loadingId;
-                // 不设置 isChainCall = true，让 finally 块默认关闭 loading
-                // 如果是链式调用，链式调用的扩展方法会处理
+                // 如果通过 isLoading getter 调用，isChainCall 参数为 true
+                // 如果是单次请求，isChainCall 参数为 false
+                isChainCallFlag = isChainCall; // 使用外部传入的 isChainCall 参数
               }
             }
           }
@@ -600,12 +606,16 @@ extension HttpUtilSafeCall on HttpUtil {
         // 所有异常都统一处理为网络错误
         return _handleNetworkError<T>();
       } finally {
-        // 如果不是链式调用，延迟关闭加载提示并清理 _chainLoadingId
-        // 使用 Future.microtask 确保在扩展方法（如 extractField、onSuccess）之后执行
-        // 如果是链式调用，加载提示会在整个链路结束时关闭
-        if (isLoading && loadingId != null && !isChainCall) {
+        // 如果不是链式调用（通过 http.isLoading.send() 标记），延迟关闭加载提示并清理 _chainLoadingId
+        // 使用 Future.microtask 确保在扩展方法（如 extractField、onSuccess、extractModel）之后执行
+        // 如果是链式调用（isChainCallFlag = true），加载提示会在整个链路结束时关闭（由 thenWithUpdate 等方法关闭）
+        // 注意：extractModel、extractField 等方法不再关闭 loading，统一由 finally 块或链式调用的最后一步关闭
+        if (isLoading && loadingId != null && !isChainCallFlag) {
           Future.microtask(() {
-            // 再次检查 loadingId 是否仍然存在（可能已被扩展方法关闭）
+            // 再次检查 loadingId 是否仍然存在
+            // 如果用户只使用了 await http.send(isLoading: true)，这里会关闭 loading
+            // 如果用户使用了 extractModel 等方法但没有后续链式调用，这里也会关闭 loading
+            // 如果用户使用了 thenWith 等链式调用，loading 会由链式调用的最后一步关闭
             if (HttpUtil._chainLoadingId == loadingId) {
               _hideLoading(loadingId);
               HttpUtil._chainLoadingId = null;
@@ -1557,6 +1567,60 @@ class _SSEManagerImpl extends SSEManager {
 
     return id;
   }
+}
+
+/// 带加载提示的 HttpUtil 包装类
+/// 用于链式调用，自动管理整个链路的加载提示
+class HttpUtilWithLoading {
+  final HttpUtil _httpUtil;
+
+  HttpUtilWithLoading(this._httpUtil);
+
+  /// 发送请求（自动显示加载提示，用于链式调用）
+  /// 整个链路共享一个加载提示，在链路结束时自动关闭
+  Future<Response<T>> send<T>({
+    required String method,
+    required String path,
+    dynamic data,
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    int priority = 0,
+    bool skipDeduplication = false,
+    bool skipQueue = false,
+    String? baseUrl,
+    String? service,
+  }) {
+    // 调用原始的 send 方法，但标记为链式调用
+    return _httpUtil.send<T>(
+      method: method,
+      path: path,
+      data: data,
+      queryParameters: queryParameters,
+      headers: headers,
+      isLoading: true,
+      priority: priority,
+      skipDeduplication: skipDeduplication,
+      skipQueue: skipQueue,
+      baseUrl: baseUrl,
+      service: service,
+      isChainCall: true, // 标记为链式调用
+    );
+  }
+}
+
+/// HttpUtil 扩展方法：提供 isLoading getter
+extension HttpUtilLoadingExtension on HttpUtil {
+  /// 获取带加载提示的 HttpUtil 实例
+  /// 用于链式调用，整个链路共享一个加载提示
+  ///
+  /// 示例：
+  /// ```dart
+  /// final result = await http.isLoading
+  ///   .send(method: hm.post, path: '/api/upload')
+  ///   .extractModel<FileUploadResult>(FileUploadResult.fromConfigJson)
+  ///   .thenWith((uploadResult) => http.uploadToUrlResponse(...));
+  /// ```
+  HttpUtilWithLoading get isLoading => HttpUtilWithLoading(this);
 }
 
 /// 全局 HTTP 请求实例（简化调用）

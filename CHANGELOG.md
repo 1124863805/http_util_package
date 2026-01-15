@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.3] - 2026-01-15
+
+### 新增
+- **链式调用 loading 管理优化**
+  - 新增 `http.isLoading.send()` 方式，明确标记链式调用，优先级高于 `isLoading: true` 参数
+  - 使用 `http.isLoading.send()` 时，整个链路共享一个 loading，在链路结束时自动关闭
+  - 推荐在链式调用中使用 `http.isLoading.send()`，单次请求使用 `http.send(isLoading: true)`
+
+### 修复
+- **链式调用 loading 过早关闭问题**
+  - 修复了链式调用中 loading 在第一步就被关闭的问题
+  - 移除了 `extractModel`、`extractField`、`onSuccess`、`onFailure` 中的 loading 关闭逻辑
+  - 统一由 `finally` 块或链式调用的最后一步（如 `thenWithUpdate`）处理 loading 关闭
+  - 修复了 `ChainResult.thenWith` 中失败时 `hasChainLoading` 标志不正确的问题
+
+### 改进
+- 优化了 loading 关闭逻辑，避免重复关闭和过早关闭
+- 更新了所有文档和示例，推荐使用 `http.isLoading.send()` 进行链式调用
+- 统一了代码注释，说明 loading 由 `http.isLoading.send()` 创建
+
 ## [1.4.2] - 2026-01-15
 
 ### 修复

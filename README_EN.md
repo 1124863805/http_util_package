@@ -114,6 +114,11 @@ if (token != null) saveToken(token);
 - `baseUrl` - Directly specify baseUrl (optional, highest priority), will override default baseUrl and service configuration
 - `service` - Use service name defined in `serviceBaseUrls` (optional), e.g., 'files', 'cdn', etc.
 
+**http.isLoading getter (Recommended for Chain Calls):**
+- `http.isLoading` - Returns `HttpUtilWithLoading` instance for chain calls
+- `http.isLoading.send(...)` - Explicitly marks chain calls, entire chain shares one loading, priority higher than `isLoading: true` parameter
+- Recommended to use `http.isLoading.send()` for chain calls, use `http.send(isLoading: true)` for single requests
+
 **Header priority (from low to high):**
 1. Static headers (`staticHeaders`) - lowest priority
 2. Dynamic headers (`dynamicHeaderBuilder`) - medium priority
@@ -338,7 +343,7 @@ HttpUtil.configure(
 
 ### Use Loading Indicator
 
-Set `isLoading: true` when making request:
+**Single Request**: Use `isLoading: true` parameter
 
 ```dart
 // Automatically show/hide loading indicator
@@ -346,11 +351,26 @@ final response = await http.send(
   method: hm.post,
   path: '/auth/login',
   data: {'email': 'user@example.com'},
-  isLoading: true, // Automatically show loading indicator
+  isLoading: true, // Automatically show loading indicator, closes after request completes
 );
 ```
 
-**Note:** In chain calls, you only need to set `isLoading: true` in the first step, and the entire chain will share one loading indicator. See [Loading Indicator Management in Chain Calls](#loading-indicator-management-in-chain-calls) for details.
+**Chain Calls (Recommended)**: Use `http.isLoading.send()` method
+
+```dart
+// Use http.isLoading.send() to explicitly mark chain calls, entire chain shares one loading
+final result = await http.isLoading
+  .send(method: hm.post, path: '/api/upload', data: {...})
+  .extractModel<FileUploadResult>(FileUploadResult.fromConfigJson)
+  .thenWith((uploadResult) => http.uploadToUrlResponse(...))
+  .thenWithUpdate<String>(...);
+// Loading automatically closes when entire chain completes
+```
+
+**Note:** 
+- Single request: Use `http.send(isLoading: true)`
+- Chain calls: Recommended to use `http.isLoading.send()`, priority higher than `isLoading: true` parameter
+- See [Loading Indicator Management in Chain Calls](#loading-indicator-management-in-chain-calls) for details
 
 ### Request-Specific Headers
 
@@ -429,9 +449,41 @@ await http.send(...)
 
 ### Loading Indicator Management in Chain Calls
 
-In chain calls, if you set `isLoading: true` in the first step, the entire chain will display **only one** loading indicator. The loading indicator will automatically close when the entire chain completes (success or failure).
+In chain calls, it is recommended to use the `http.isLoading.send()` method. The entire chain will display **only one** loading indicator, which will automatically close when the entire chain completes (success or failure).
 
-**Usage:**
+**Recommended Method (using `http.isLoading.send()`):**
+
+```dart
+// Use http.isLoading.send() to explicitly mark chain calls, entire chain shares one loading indicator
+final result = await http.isLoading
+  .send(
+    method: hm.post,
+    path: '/uploader/generate',
+    data: {'ext': 'jpg'},
+  )
+  .extractModel<FileUploadResult>(FileUploadResult.fromConfigJson)
+  .thenWith(
+    (uploadResult) => http.uploadToUrlResponse(
+      uploadUrl: uploadResult.uploadUrl,
+      file: file,
+      method: 'PUT',
+      // No need to set isLoading, automatically reuses the chain's loading indicator
+    ),
+  )
+  .thenWithUpdate<String>(
+    (uploadResult, uploadResponse) => http.send(
+      method: hm.post,
+      path: '/uploader/get-image-url',
+      data: {'image_key': uploadResult.imageKey},
+      // No need to set isLoading, automatically reuses the chain's loading indicator
+    ),
+    (response) => response.extractField<String>('image_url'),
+    (uploadResult, imageUrl) => uploadResult.copyWith(imageUrl: imageUrl),
+  );
+// The loading indicator automatically closes when the entire chain completes
+```
+
+**Traditional Method (using `isLoading: true` parameter):**
 
 ```dart
 // Set isLoading: true in the first step, the entire chain shares one loading indicator
@@ -464,11 +516,10 @@ final result = await http.send(
 ```
 
 **Benefits:**
-- ✅ Only need to set `isLoading: true` in the first step
-- ✅ Subsequent steps automatically inherit, no need to repeat
+- ✅ **Recommended to use `http.isLoading.send()`**: Explicitly marks chain calls, higher priority, prevents loading from closing prematurely
+- ✅ Only need to set in the first step, subsequent steps automatically inherit, no need to repeat
 - ✅ Only one loading indicator for the entire chain, avoiding flickering
 - ✅ Automatically closes when the chain completes, no manual management needed
-```
 
 ## File Download
 
