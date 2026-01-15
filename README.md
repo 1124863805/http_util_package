@@ -18,6 +18,7 @@
 - ✅ 类型安全的 HTTP 方法常量
 - ✅ 可配置的日志打印
 - ✅ 文件上传支持 - 单文件、多文件上传，支持进度回调
+- ✅ 文件下载支持 - 文件下载，支持进度回调、断点续传、取消下载
 - ✅ OSS 直传支持 - 直接上传到对象存储（阿里云、腾讯云等），不经过后端服务器
 - ✅ Server-Sent Events (SSE) 支持 - 实时事件流处理
 - ✅ 数据提取增强 - 提供 `extractField`、`extractModel`、`extractList`、`extractPath` 等简化方法
@@ -28,7 +29,7 @@
 
 ```yaml
 dependencies:
-  dio_http_util: ^1.2.6
+  dio_http_util: ^1.3.0
 ```
 
 ## 快速开始
@@ -1013,6 +1014,161 @@ final response2 = await http.uploadToUrlResponse(
 - 支持链式调用，可以继续使用 `.thenWith()` 等方法
 - 如果需要获取文件访问 URL，通常需要从后端接口获取
 - 进度回调中的 `sent` 和 `total` 可能为 -1（未知大小），需要在回调中处理
+
+## 文件下载
+
+### 基本使用
+
+**参数说明：**
+- `path` - 请求路径（必需）
+  - 可以是相对路径（如 `/api/download/file.pdf`），会使用配置的 `baseUrl`
+  - 也可以是完整 URL（如 `https://cdn.example.com/file.pdf`），会直接使用该 URL，忽略 `baseUrl`
+- `savePath` - 保存文件的完整路径（包括文件名，必需）
+- `queryParameters` - URL 查询参数（可选，仅在 `path` 为相对路径时有效，完整 URL 的查询参数应包含在 URL 中）
+- `headers` - 特定请求的请求头（可选）
+  - 如果 `path` 是相对路径，会与全局请求头合并，如果键相同则覆盖全局请求头
+  - 如果 `path` 是完整 URL，只使用特定请求头（不合并全局请求头）
+- `onProgress` - 下载进度回调 `(received, total) => void`（可选）
+- `cancelToken` - 取消令牌（可选）
+- `deleteOnError` - 下载失败时是否删除已下载的文件（默认 true）
+- `resumeOnError` - 是否支持断点续传（默认 true）
+
+**返回值：**
+- 返回 `Future<DownloadResponse<String>>`，其中 `data` 字段为文件路径
+- 可以通过 `response.isSuccess` 检查是否成功
+- 可以通过 `response.filePath` 获取下载的文件路径
+- 可以通过 `response.totalBytes` 获取下载的总字节数
+
+**示例（相对路径）：**
+```dart
+import 'dart:io';
+import 'package:dio_http_util/http_util.dart';
+import 'package:path_provider/path_provider.dart';
+
+// 获取保存路径
+final directory = await getApplicationDocumentsDirectory();
+final savePath = '${directory.path}/downloaded_file.pdf';
+
+// 下载文件（使用 baseUrl）
+final response = await http.downloadFile(
+  path: '/api/download/file.pdf',
+  savePath: savePath,
+  onProgress: (received, total) {
+    if (total > 0) {
+      print('下载进度: ${(received / total * 100).toStringAsFixed(1)}%');
+    }
+  },
+);
+
+if (response.isSuccess) {
+  print('下载成功，文件路径: ${response.filePath}');
+  print('文件大小: ${response.totalBytes} 字节');
+} else {
+  print('下载失败: ${response.errorMessage}');
+}
+```
+
+**示例（完整 URL）：**
+```dart
+// 从 CDN 或其他服务器下载，不依赖 baseUrl
+final response = await http.downloadFile(
+  path: 'https://cdn.example.com/files/file.pdf',
+  savePath: '/path/to/save/file.pdf',
+  headers: {'X-Custom-Header': 'value'}, // 完整 URL 时只使用特定请求头
+  onProgress: (received, total) {
+    if (total > 0) {
+      print('下载进度: ${(received / total * 100).toStringAsFixed(1)}%');
+    }
+  },
+);
+
+if (response.isSuccess) {
+  print('下载成功');
+}
+```
+
+### 断点续传
+
+如果下载失败，可以启用断点续传功能，再次调用时会自动从断点继续下载：
+
+```dart
+// 第一次下载（可能失败）
+final response1 = await http.downloadFile(
+  path: '/api/download/large-file.zip',
+  savePath: '/path/to/save/large-file.zip',
+  resumeOnError: true, // 启用断点续传
+  onProgress: (received, total) {
+    print('下载进度: ${(received / total * 100).toStringAsFixed(1)}%');
+  },
+);
+
+// 如果下载失败，再次调用会自动从断点继续
+if (!response1.isSuccess) {
+  print('下载失败，尝试断点续传...');
+  final response2 = await http.downloadFile(
+    path: '/api/download/large-file.zip',
+    savePath: '/path/to/save/large-file.zip',
+    resumeOnError: true,
+    onProgress: (received, total) {
+      print('续传进度: ${(received / total * 100).toStringAsFixed(1)}%');
+    },
+  );
+  
+  if (response2.isSuccess) {
+    print('断点续传成功');
+  }
+}
+```
+
+**断点续传说明：**
+- 如果 `resumeOnError` 为 true，下载失败后再次调用相同路径和保存路径时，会自动从断点继续下载
+- 断点续传通过 HTTP Range 请求头实现
+- 如果文件已存在且完整，会直接返回成功，不会重新下载
+- 服务器必须支持 Range 请求（大多数服务器都支持）
+
+### 取消下载
+
+```dart
+import 'package:dio/dio.dart' as dio_package;
+
+// 创建取消令牌
+final cancelToken = dio_package.CancelToken();
+
+// 下载文件
+final response = await http.downloadFile(
+  path: '/api/download/file.pdf',
+  savePath: '/path/to/save/file.pdf',
+  cancelToken: cancelToken,
+  onProgress: (received, total) {
+    print('下载进度: ${(received / total * 100).toStringAsFixed(1)}%');
+  },
+);
+
+// 取消下载（例如：用户点击取消按钮）
+cancelToken.cancel('用户取消下载');
+```
+
+### 特定请求头
+
+```dart
+final response = await http.downloadFile(
+  path: '/api/download/private-file.pdf',
+  savePath: '/path/to/save/file.pdf',
+  headers: {'X-Download-Type': 'private'}, // 特定请求头
+);
+```
+
+### 注意事项
+
+- **路径类型**：
+  - 相对路径（如 `/api/download/file.pdf`）会使用配置的 `baseUrl` 和全局请求头
+  - 完整 URL（如 `https://cdn.example.com/file.pdf`）会直接使用该 URL，忽略 `baseUrl` 和全局请求头
+  - 完整 URL 的查询参数应包含在 URL 中，`queryParameters` 参数会被忽略
+- 下载前会自动创建保存目录（如果不存在）
+- 下载失败时，默认会删除已下载的文件（可通过 `deleteOnError: false` 禁用）
+- 进度回调中的 `total` 可能为 -1（未知大小），需要在回调中处理
+- 下载大文件时建议启用断点续传，避免网络中断导致重新下载
+- 下载的文件路径必须包含文件名，不能只是目录路径
 
 ## Server-Sent Events (SSE)
 

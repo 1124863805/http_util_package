@@ -10,6 +10,7 @@ import 'log_interceptor.dart';
 import 'simple_error_response.dart';
 import 'api_response.dart';
 import 'upload_file.dart';
+import 'download_response.dart';
 import 'sse/sse_event.dart';
 import 'sse/sse_connection.dart';
 import 'sse/sse_manager.dart';
@@ -827,6 +828,344 @@ extension HttpUtilFileUpload on HttpUtil {
       // 但为了确保资源释放，我们可以关闭它（可选）
       // dio.close(); // Dio 5.x 没有 close 方法，连接池会自动管理
     }
+  }
+}
+
+/// HttpUtil 文件下载扩展方法
+extension HttpUtilFileDownload on HttpUtil {
+  /// 下载文件
+  ///
+  /// [path] 请求路径（相对于 baseUrl）或完整 URL（如 'https://cdn.example.com/file.pdf'）
+  ///        - 如果是相对路径（如 '/api/download/file.pdf'），会使用配置的 baseUrl
+  ///        - 如果是完整 URL（如 'https://cdn.example.com/file.pdf'），会直接使用该 URL，忽略 baseUrl
+  /// [savePath] 保存文件的完整路径（包括文件名）
+  /// [queryParameters] URL 查询参数（仅在 path 为相对路径时有效，完整 URL 的查询参数应包含在 URL 中）
+  /// [headers] 特定请求的请求头（可选），会与全局请求头合并，如果键相同则覆盖全局请求头
+  /// [onProgress] 下载进度回调 (已下载字节数, 总字节数)
+  /// [cancelToken] 取消令牌
+  /// [deleteOnError] 下载失败时是否删除已下载的文件（默认 true）
+  /// [resumeOnError] 是否支持断点续传（默认 true），如果为 true，下载失败后可以继续下载
+  ///
+  /// **返回值：**
+  /// - 返回 `Future<DownloadResponse<String>>`，其中 `data` 字段为文件路径
+  /// - 可以通过 `response.isSuccess` 检查是否成功
+  /// - 可以通过 `response.filePath` 获取下载的文件路径
+  ///
+  /// **断点续传：**
+  /// - 如果 `resumeOnError` 为 true，下载失败后再次调用相同路径和保存路径时，会自动从断点继续下载
+  /// - 断点续传通过 HTTP Range 请求头实现
+  /// - 如果文件已存在且完整，会直接返回成功，不会重新下载
+  ///
+  /// **示例（相对路径）：**
+  /// ```dart
+  /// final response = await http.downloadFile(
+  ///   path: '/api/download/file.pdf',
+  ///   savePath: '/path/to/save/file.pdf',
+  ///   onProgress: (received, total) {
+  ///     print('下载进度: ${(received / total * 100).toStringAsFixed(1)}%');
+  ///   },
+  /// );
+  /// ```
+  ///
+  /// **示例（完整 URL）：**
+  /// ```dart
+  /// // 从 CDN 或其他服务器下载，不依赖 baseUrl
+  /// final response = await http.downloadFile(
+  ///   path: 'https://cdn.example.com/files/file.pdf',
+  ///   savePath: '/path/to/save/file.pdf',
+  ///   onProgress: (received, total) {
+  ///     print('下载进度: ${(received / total * 100).toStringAsFixed(1)}%');
+  ///   },
+  /// );
+  /// ```
+  ///
+  /// **示例（断点续传）：**
+  /// ```dart
+  /// // 第一次下载（可能失败）
+  /// final response1 = await http.downloadFile(
+  ///   path: '/api/download/large-file.zip',
+  ///   savePath: '/path/to/save/large-file.zip',
+  ///   resumeOnError: true, // 启用断点续传
+  /// );
+  ///
+  /// // 如果下载失败，再次调用会自动从断点继续
+  /// if (!response1.isSuccess) {
+  ///   final response2 = await http.downloadFile(
+  ///     path: '/api/download/large-file.zip',
+  ///     savePath: '/path/to/save/large-file.zip',
+  ///     resumeOnError: true,
+  ///   );
+  /// }
+  /// ```
+  ///
+  /// **示例（特定请求头）：**
+  /// ```dart
+  /// final response = await http.downloadFile(
+  ///   path: '/api/download/private-file.pdf',
+  ///   savePath: '/path/to/save/file.pdf',
+  ///   headers: {'X-Download-Type': 'private'}, // 特定请求头
+  /// );
+  /// ```
+  Future<DownloadResponse<String>> downloadFile({
+    required String path,
+    required String savePath,
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    void Function(int received, int total)? onProgress,
+    dio_package.CancelToken? cancelToken,
+    bool deleteOnError = true,
+    bool resumeOnError = true,
+  }) async {
+    try {
+      // 检查 path 是否是完整 URL
+      final isAbsoluteUrl = _isAbsoluteUrl(path);
+
+      // 如果是完整 URL，使用独立的 Dio 实例（不依赖 baseUrl 和拦截器）
+      // 如果是相对路径，使用配置的 Dio 实例
+      final dio = isAbsoluteUrl ? HttpUtil.createDio() : HttpUtil.dio;
+
+      // 获取配置（用于请求头和错误处理）
+      final config = HttpUtilSafeCall._config;
+      if (config == null && !isAbsoluteUrl) {
+        throw StateError('HttpUtil 未配置，请先调用 HttpUtil.configure() 进行配置');
+      }
+
+      // 检查保存路径的目录是否存在，如果不存在则创建
+      final file = File(savePath);
+      final directory = file.parent;
+      if (!await directory.exists()) {
+        await directory.create(recursive: true);
+      }
+
+      // 检查文件是否已存在（用于断点续传）
+      int? startByte;
+      if (resumeOnError && await file.exists()) {
+        final fileLength = await file.length();
+        if (fileLength > 0) {
+          startByte = fileLength;
+        }
+      }
+
+      // 构建请求选项
+      final requestHeaders = <String, dynamic>{};
+
+      // 如果是完整 URL，只使用特定请求头（不合并全局请求头）
+      // 如果是相对路径，先添加全局请求头，再添加特定请求头
+      if (!isAbsoluteUrl && config != null) {
+        // 先添加静态请求头（优先级最低）
+        if (config.staticHeaders != null) {
+          requestHeaders.addAll(config.staticHeaders!);
+        }
+
+        // 再添加动态请求头（优先级中等）
+        if (config.dynamicHeaderBuilder != null) {
+          final dynamicHeaders = await config.dynamicHeaderBuilder!();
+          requestHeaders.addAll(dynamicHeaders);
+        }
+      }
+
+      // 如果支持断点续传且文件已存在，添加 Range 请求头
+      if (startByte != null && startByte > 0) {
+        requestHeaders['Range'] = 'bytes=$startByte-';
+      }
+
+      // 最后添加特定请求头（优先级最高，会覆盖全局请求头）
+      if (headers != null) {
+        requestHeaders.addAll(headers);
+      }
+
+      final options = dio_package.Options(
+        headers: requestHeaders,
+        // 下载时不需要解析响应体
+        responseType: dio_package.ResponseType.stream,
+        validateStatus: (status) => true,
+      );
+
+      // 转换进度回调格式
+      dio_package.ProgressCallback? dioProgressCallback;
+      if (onProgress != null) {
+        dioProgressCallback = (received, total) {
+          // 处理断点续传的情况
+          if (startByte != null && startByte > 0) {
+            // 调整已接收字节数（加上已下载的部分）
+            final adjustedReceived = received + startByte;
+            final adjustedTotal = total >= 0 ? total + startByte : total;
+            onProgress(adjustedReceived, adjustedTotal);
+          } else {
+            // 处理 Dio 可能返回 -1 的情况（未知大小）
+            if (received >= 0) {
+              // 即使 total 为 -1（未知大小），也应该调用回调，传递已接收的字节数
+              onProgress(received, total);
+            }
+          }
+        };
+      }
+
+      // 执行下载
+      // 注意：如果 path 是完整 URL，queryParameters 会被忽略（应包含在 URL 中）
+      final response = await dio.get(
+        path,
+        queryParameters: isAbsoluteUrl ? null : queryParameters,
+        options: options,
+        cancelToken: cancelToken,
+        onReceiveProgress: dioProgressCallback,
+      );
+
+      // 检查响应状态
+      if (response.statusCode == null) {
+        if (deleteOnError && await file.exists()) {
+          await file.delete();
+        }
+        return DownloadResponse.failure<String>(
+          errorMessage: '下载失败：无效的响应状态码',
+        );
+      }
+
+      // 处理 206 Partial Content（断点续传响应）
+      if (response.statusCode == 206) {
+        // 断点续传成功，继续写入文件
+        if (response.data is Stream) {
+          final stream = response.data as Stream<List<int>>;
+          // 206 响应时，如果发送了 Range 请求（startByte > 0），使用 append 模式
+          // 如果 startByte 为 null（理论上不应该发生），使用 write 模式
+          final fileMode = (startByte != null && startByte > 0)
+              ? FileMode.append
+              : FileMode.write;
+          final sink = file.openWrite(mode: fileMode);
+
+          try {
+            await for (final chunk in stream) {
+              sink.add(chunk);
+            }
+            await sink.flush();
+          } catch (e) {
+            // 写入文件时出错，关闭流并删除不完整的文件
+            await sink.close();
+            if (deleteOnError && await file.exists()) {
+              await file.delete();
+            }
+            return DownloadResponse.failure<String>(
+              errorMessage: '下载失败：写入文件时出错 - $e',
+            );
+          } finally {
+            await sink.close();
+          }
+        } else {
+          if (deleteOnError && await file.exists()) {
+            await file.delete();
+          }
+          return DownloadResponse.failure<String>(
+            errorMessage: '下载失败：无效的响应数据格式',
+          );
+        }
+      } else if (response.statusCode! >= 200 && response.statusCode! < 300) {
+        // 正常下载（200 OK）
+        // 如果发送了 Range 请求但收到 200，说明服务器不支持断点续传
+        // 需要删除已存在的文件，然后重新下载
+        if (startByte != null && startByte > 0) {
+          // 服务器不支持断点续传，删除已存在的文件
+          if (await file.exists()) {
+            await file.delete();
+          }
+        }
+
+        if (response.data is Stream) {
+          final stream = response.data as Stream<List<int>>;
+          final sink = file.openWrite();
+
+          try {
+            await for (final chunk in stream) {
+              sink.add(chunk);
+            }
+            await sink.flush();
+          } catch (e) {
+            // 写入文件时出错，关闭流并删除不完整的文件
+            await sink.close();
+            if (deleteOnError && await file.exists()) {
+              await file.delete();
+            }
+            return DownloadResponse.failure<String>(
+              errorMessage: '下载失败：写入文件时出错 - $e',
+            );
+          } finally {
+            await sink.close();
+          }
+        } else {
+          if (deleteOnError && await file.exists()) {
+            await file.delete();
+          }
+          return DownloadResponse.failure<String>(
+            errorMessage: '下载失败：无效的响应数据格式',
+          );
+        }
+      } else {
+        // 下载失败
+        if (deleteOnError && await file.exists()) {
+          await file.delete();
+        }
+        return DownloadResponse.failure<String>(
+          errorMessage: '下载失败：HTTP ${response.statusCode}',
+        );
+      }
+
+      // 获取文件总大小
+      final totalBytes = await file.length();
+
+      // 下载成功
+      return DownloadResponse.success(
+        filePath: savePath,
+        totalBytes: totalBytes,
+      );
+    } on dio_package.DioException catch (e) {
+      // Dio 异常处理
+      final file = File(savePath);
+      if (deleteOnError && await file.exists()) {
+        await file.delete();
+      }
+
+      String errorMessage;
+      if (e.type == dio_package.DioExceptionType.connectionTimeout ||
+          e.type == dio_package.DioExceptionType.receiveTimeout ||
+          e.type == dio_package.DioExceptionType.sendTimeout) {
+        errorMessage = '下载超时，请检查网络连接';
+      } else if (e.type == dio_package.DioExceptionType.cancel) {
+        errorMessage = '下载已取消';
+      } else if (e.type == dio_package.DioExceptionType.connectionError) {
+        errorMessage = '网络连接错误，请检查网络设置';
+      } else {
+        errorMessage = '下载失败：${e.message ?? '未知错误'}';
+      }
+
+      // 触发错误提示
+      final config = HttpUtilSafeCall._config;
+      if (config?.onError != null) {
+        config!.onError!(errorMessage);
+      }
+
+      return DownloadResponse.failure<String>(errorMessage: errorMessage);
+    } catch (e) {
+      // 其他异常处理
+      final file = File(savePath);
+      if (deleteOnError && await file.exists()) {
+        await file.delete();
+      }
+
+      final errorMessage = '下载失败：$e';
+
+      // 触发错误提示
+      final config = HttpUtilSafeCall._config;
+      if (config?.onError != null) {
+        config!.onError!(errorMessage);
+      }
+
+      return DownloadResponse.failure<String>(errorMessage: errorMessage);
+    }
+  }
+
+  /// 检查路径是否是完整 URL
+  /// 如果 path 以 'http://' 或 'https://' 开头，则认为是完整 URL
+  static bool _isAbsoluteUrl(String path) {
+    return path.startsWith('http://') || path.startsWith('https://');
   }
 }
 

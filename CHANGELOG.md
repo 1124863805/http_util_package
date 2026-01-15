@@ -2,7 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.2.6] - 2024-XX-XX
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.3.0] - 2026-01-15
+
+### Added
+- **文件下载功能**
+  - 新增 `downloadFile()` 方法，支持文件下载
+  - 支持下载进度回调，实时显示下载进度
+  - 支持断点续传，下载失败后可以继续下载
+  - 支持取消下载，通过 `CancelToken` 取消下载操作
+  - 支持特定请求头，可以为单个下载请求设置特定的请求头
+  - 自动创建保存目录，如果目录不存在会自动创建
+  - 下载失败时自动删除已下载的文件（可配置）
+  - 新增 `DownloadResponse` 类，用于表示下载结果
+
+### 改进
+- 优化了文件下载的错误处理，提供更详细的错误信息
+- 更新了文档，添加了文件下载功能的完整说明和示例
+
+## [1.2.6] - 2026-01-15
 
 ### Added
 - Added `headers` parameter support to `uploadFile()` method for request-specific headers
@@ -11,9 +31,6 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - Updated documentation to include `headers` parameter examples for file upload and SSE methods
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [1.2.5] - 2026-01-15
 

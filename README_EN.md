@@ -18,6 +18,7 @@ A powerful HTTP utility package based on Dio with configurable header injection 
 - ✅ Type-safe HTTP method constants
 - ✅ Configurable logging
 - ✅ File upload support - single file, multiple files upload, with progress callback
+- ✅ File download support - file download with progress callback, resume support, and cancellation
 - ✅ OSS direct upload support - directly upload to object storage (Aliyun, Tencent Cloud, etc.), without going through backend server
 - ✅ Server-Sent Events (SSE) support - real-time event stream processing
 - ✅ Enhanced data extraction methods - simplified data extraction API
@@ -28,7 +29,7 @@ A powerful HTTP utility package based on Dio with configurable header injection 
 
 ```yaml
 dependencies:
-  dio_http_util: ^1.2.6
+  dio_http_util: ^1.3.0
 ```
 
 ## Quick Start
@@ -341,6 +342,161 @@ final result = await http.send(
 - ✅ Only one loading indicator for the entire chain, avoiding flickering
 - ✅ Automatically closes when the chain completes, no manual management needed
 ```
+
+## File Download
+
+### Basic Usage
+
+**Parameters:**
+- `path` - Request path (required)
+  - Can be a relative path (e.g., `/api/download/file.pdf`), will use configured `baseUrl`
+  - Can also be a full URL (e.g., `https://cdn.example.com/file.pdf`), will use the URL directly, ignoring `baseUrl`
+- `savePath` - Full path to save the file (including filename, required)
+- `queryParameters` - URL query parameters (optional, only effective when `path` is a relative path, query parameters for full URLs should be included in the URL)
+- `headers` - Request-specific headers (optional)
+  - If `path` is a relative path, will be merged with global headers, and will override global headers if keys are the same
+  - If `path` is a full URL, only uses specific headers (does not merge with global headers)
+- `onProgress` - Download progress callback `(received, total) => void` (optional)
+- `cancelToken` - Cancel token (optional)
+- `deleteOnError` - Whether to delete downloaded file on error (default true)
+- `resumeOnError` - Whether to support resume download (default true)
+
+**Return Value:**
+- Returns `Future<DownloadResponse<String>>`, where `data` field is the file path
+- Check success with `response.isSuccess`
+- Get file path with `response.filePath`
+- Get total bytes with `response.totalBytes`
+
+**Example (Relative Path):**
+```dart
+import 'dart:io';
+import 'package:dio_http_util/http_util.dart';
+import 'package:path_provider/path_provider.dart';
+
+// Get save path
+final directory = await getApplicationDocumentsDirectory();
+final savePath = '${directory.path}/downloaded_file.pdf';
+
+// Download file (using baseUrl)
+final response = await http.downloadFile(
+  path: '/api/download/file.pdf',
+  savePath: savePath,
+  onProgress: (received, total) {
+    if (total > 0) {
+      print('Download progress: ${(received / total * 100).toStringAsFixed(1)}%');
+    }
+  },
+);
+
+if (response.isSuccess) {
+  print('Download successful, file path: ${response.filePath}');
+  print('File size: ${response.totalBytes} bytes');
+} else {
+  print('Download failed: ${response.errorMessage}');
+}
+```
+
+**Example (Full URL):**
+```dart
+// Download from CDN or other server, independent of baseUrl
+final response = await http.downloadFile(
+  path: 'https://cdn.example.com/files/file.pdf',
+  savePath: '/path/to/save/file.pdf',
+  headers: {'X-Custom-Header': 'value'}, // Only uses specific headers for full URLs
+  onProgress: (received, total) {
+    if (total > 0) {
+      print('Download progress: ${(received / total * 100).toStringAsFixed(1)}%');
+    }
+  },
+);
+
+if (response.isSuccess) {
+  print('Download successful');
+}
+```
+
+### Resume Download
+
+If download fails, you can enable resume download feature. When called again, it will automatically resume from the breakpoint:
+
+```dart
+// First download (may fail)
+final response1 = await http.downloadFile(
+  path: '/api/download/large-file.zip',
+  savePath: '/path/to/save/large-file.zip',
+  resumeOnError: true, // Enable resume download
+  onProgress: (received, total) {
+    print('Download progress: ${(received / total * 100).toStringAsFixed(1)}%');
+  },
+);
+
+// If download fails, calling again will automatically resume from breakpoint
+if (!response1.isSuccess) {
+  print('Download failed, trying to resume...');
+  final response2 = await http.downloadFile(
+    path: '/api/download/large-file.zip',
+    savePath: '/path/to/save/large-file.zip',
+    resumeOnError: true,
+    onProgress: (received, total) {
+      print('Resume progress: ${(received / total * 100).toStringAsFixed(1)}%');
+    },
+  );
+  
+  if (response2.isSuccess) {
+    print('Resume download successful');
+  }
+}
+```
+
+**Resume Download Notes:**
+- If `resumeOnError` is true, calling again with the same path and save path will automatically resume from the breakpoint
+- Resume download is implemented using HTTP Range header
+- If the file already exists and is complete, it will return success directly without re-downloading
+- The server must support Range requests (most servers do)
+
+### Cancel Download
+
+```dart
+import 'package:dio/dio.dart' as dio_package;
+
+// Create cancel token
+final cancelToken = dio_package.CancelToken();
+
+// Download file
+final response = await http.downloadFile(
+  path: '/api/download/file.pdf',
+  savePath: '/path/to/save/file.pdf',
+  cancelToken: cancelToken,
+  onProgress: (received, total) {
+    print('Download progress: ${(received / total * 100).toStringAsFixed(1)}%');
+  },
+);
+
+// Cancel download (e.g., user clicks cancel button)
+cancelToken.cancel('User cancelled download');
+```
+
+### Request-Specific Headers
+
+```dart
+final response = await http.downloadFile(
+  path: '/api/download/private-file.pdf',
+  savePath: '/path/to/save/file.pdf',
+  headers: {'X-Download-Type': 'private'}, // Request-specific headers
+);
+```
+
+### Notes
+
+- **Path Type**:
+  - Relative paths (e.g., `/api/download/file.pdf`) will use configured `baseUrl` and global headers
+  - Full URLs (e.g., `https://cdn.example.com/file.pdf`) will use the URL directly, ignoring `baseUrl` and global headers
+  - Query parameters for full URLs should be included in the URL, the `queryParameters` parameter will be ignored
+- Save directory will be automatically created if it doesn't exist
+- Downloaded file will be automatically deleted on error by default (can be disabled with `deleteOnError: false`)
+- The `total` in progress callback may be -1 (unknown size), need to handle in callback
+- For large file downloads, it's recommended to enable resume download to avoid re-downloading on network interruption
+- The save path must include the filename, not just the directory path
 
 ## Custom Response Parser
 
