@@ -377,10 +377,10 @@ extension HttpUtilSafeCall on HttpUtil {
   static HttpConfig? get _config => HttpUtil._config;
 
   /// 检查错误是否应该被处理（去重检查）
-  /// 
+  ///
   /// [httpStatusCode] HTTP 状态码
   /// [window] 去重时间窗口
-  /// 
+  ///
   /// 返回 true 表示应该处理，false 表示在时间窗口内已处理过，应该跳过
   static bool _shouldHandleError(int? httpStatusCode, Duration window) {
     if (httpStatusCode == null) return true;
@@ -555,6 +555,8 @@ extension HttpUtilSafeCall on HttpUtil {
     String? baseUrl, // 直接指定 baseUrl（最高优先级）
     String? service, // 使用 serviceBaseUrls 中定义的服务名称
     bool isChainCall = false, // 内部参数：标记是否为链式调用（由 isLoading getter 使用）
+    void Function(int? httpStatusCode, int? errorCode, String message)?
+        onFailure, // 请求级别的错误处理回调
   }) async {
     // 实际执行请求的函数
     Future<Response<T>> executeRequest() async {
@@ -631,19 +633,29 @@ extension HttpUtilSafeCall on HttpUtil {
             final httpStatusCode = response.httpStatusCode; // 获取 HTTP 状态码
             final errorCode = response.errorCode; // 获取业务错误码
             Future.microtask(() {
-              // 再次检查 errorHandled，如果链式调用的 onFailure 已经处理了，就不调用全局的错误处理
+              // 再次检查 errorHandled，如果链式调用的 onFailure 已经处理了，就不调用其他错误处理
               if (!response.errorHandled) {
-                // 优先级 1：401 且设置了 on401Unauthorized
+                // 优先级 1：send 的 onFailure（请求级别的错误处理）
+                if (onFailure != null) {
+                  onFailure(httpStatusCode, errorCode, errorMessage);
+                  // 通过调用 response.onFailure 来标记错误已处理（传入空回调，只用于标记）
+                  // 这样可以复用现有的标记逻辑，避免直接访问私有方法
+                  response.onFailure((_, __, ___) {});
+                  return;
+                }
+
+                // 优先级 2：401 且设置了 on401Unauthorized
                 if (httpStatusCode == 401 && config.on401Unauthorized != null) {
                   // 检查是否需要去重
-                  if (HttpUtilSafeCall._shouldHandleError(401, config.errorDeduplicationWindow)) {
+                  if (HttpUtilSafeCall._shouldHandleError(
+                      401, config.errorDeduplicationWindow)) {
                     config.on401Unauthorized!();
                   }
                   // 401 已由 on401Unauthorized 处理，不再调用 onFailure
                   return;
                 }
 
-                // 优先级 2：其他错误或 401 但没有设置 on401Unauthorized
+                // 优先级 3：全局的 onFailure
                 if (config.onFailure != null) {
                   config.onFailure!(httpStatusCode, errorCode, errorMessage);
                 }
@@ -929,7 +941,8 @@ extension HttpUtilFileUpload on HttpUtil {
     final errorMessage = config?.networkErrorKey ?? '网络错误，请稍后重试！';
 
     if (config?.onFailure != null) {
-      config!.onFailure!(null, null, errorMessage); // 网络错误没有 httpStatusCode 和 errorCode
+      config!.onFailure!(
+          null, null, errorMessage); // 网络错误没有 httpStatusCode 和 errorCode
     }
 
     return SimpleErrorResponse<T>(errorMessage);
@@ -1035,7 +1048,8 @@ extension HttpUtilFileUpload on HttpUtil {
       final errorMessage = config?.networkErrorKey ?? '上传失败，请稍后重试！';
 
       if (config?.onFailure != null) {
-        config!.onFailure!(null, null, errorMessage); // 上传异常没有 httpStatusCode 和 errorCode
+        config!.onFailure!(
+            null, null, errorMessage); // 上传异常没有 httpStatusCode 和 errorCode
       }
 
       return ApiResponse<T>(
@@ -1473,7 +1487,8 @@ extension HttpUtilFileDownload on HttpUtil {
       // 触发错误提示
       final config = HttpUtilSafeCall._config;
       if (config?.onFailure != null) {
-        config!.onFailure!(null, null, errorMessage); // 下载异常没有 httpStatusCode 和 errorCode
+        config!.onFailure!(
+            null, null, errorMessage); // 下载异常没有 httpStatusCode 和 errorCode
       }
 
       return DownloadResponse.failure<String>(errorMessage: errorMessage);
@@ -1489,7 +1504,8 @@ extension HttpUtilFileDownload on HttpUtil {
       // 触发错误提示
       final config = HttpUtilSafeCall._config;
       if (config?.onFailure != null) {
-        config!.onFailure!(null, null, errorMessage); // 下载异常没有 httpStatusCode 和 errorCode
+        config!.onFailure!(
+            null, null, errorMessage); // 下载异常没有 httpStatusCode 和 errorCode
       }
 
       return DownloadResponse.failure<String>(errorMessage: errorMessage);

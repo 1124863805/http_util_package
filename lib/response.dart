@@ -44,12 +44,12 @@ abstract class Response<T> {
   /// 数据（如果成功）
   T? get data;
 
-  /// 错误是否已被处理（通过链式调用的 onFailure 回调）
-  /// 如果为 true，表示错误已经通过链式调用的 onFailure 回调处理，不应该再调用全局的 onFailure
+  /// 错误是否已被处理（通过链式调用的 onFailure 回调或 send 的 onFailure 回调）
+  /// 如果为 true，表示错误已经通过错误处理回调处理，不应该再调用全局的 onFailure
   bool get errorHandled => _errorHandled;
   bool _errorHandled = false;
 
-  /// 标记错误已处理（内部使用）
+  /// 标记错误已处理（内部使用，供 http_util_impl 调用）
   void _markErrorHandled() {
     _errorHandled = true;
   }

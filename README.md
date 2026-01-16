@@ -133,6 +133,7 @@ if (token != null) saveToken(token);
 - `skipDeduplication` - 是否跳过去重（默认 false），如果为 true，即使启用了去重也会直接执行
 - `baseUrl` - 直接指定 baseUrl（可选，最高优先级），会覆盖默认 baseUrl 和服务配置
 - `service` - 使用 `serviceBaseUrls` 中定义的服务名称（可选），如 'files'、'cdn' 等
+- `onFailure` - 请求级别的错误处理回调（可选），如果提供，将优先于 `on401Unauthorized` 和全局 `onFailure` 调用
 
 **http.isLoading getter（链式调用推荐）：**
 - `http.isLoading` - 返回 `HttpUtilWithLoading` 实例，用于链式调用
@@ -591,14 +592,19 @@ final result = await http.send(
 
 1. **链式调用的 `onFailure`**（最高优先级）
    - 如果使用了链式调用的 `onFailure`，错误将被标记为已处理
-   - 全局的错误处理回调不会被调用
+   - 其他错误处理回调不会被调用
 
-2. **`on401Unauthorized`**（专门处理 401 错误）
+2. **`send` 的 `onFailure`**（请求级别）
+   - 如果 `send` 方法传入了 `onFailure` 参数，将优先使用此回调
+   - 适用于需要针对特定请求进行错误处理的场景
+   - 调用后会自动标记错误已处理，避免全局 `onFailure` 重复调用
+
+3. **`on401Unauthorized`**（专门处理 401 错误）
    - 如果设置了 `on401Unauthorized`，401 错误将优先使用此回调
    - 自动去重：在 `errorDeduplicationWindow` 时间窗口内（默认 5 秒），401 错误只会处理一次
    - 401 错误不会调用 `onFailure` 回调
 
-3. **全局的 `onFailure`**（兜底处理）
+4. **全局的 `onFailure`**（兜底处理）
    - 处理其他错误（非 401）或 401 但没有设置 `on401Unauthorized` 的情况
 
 ### 401 错误处理（推荐）
@@ -639,9 +645,51 @@ HttpUtil.configure(
 - ✅ 逻辑清晰：401 和其他错误分离处理
 - ✅ 使用简单：只需设置回调，无需关心去重逻辑
 
-### 其他错误处理
+### 请求级别的错误处理
 
-如果不需要专门处理 401，可以只使用 `onFailure`：
+如果需要在特定请求中处理错误，有两种方式：
+
+**方式 1：使用 `send` 的 `onFailure` 参数（推荐）**
+
+```dart
+// 在 send 方法中直接传入 onFailure 参数
+final tokenInfo = await http.send(
+  method: hm.post,
+  path: '/auth/login',
+  data: {'email': email, 'code': code},
+  onFailure: (httpStatusCode, errorCode, message) {
+    // 打印错误信息，方便调试
+    print('🔍 [登录错误] HTTP 状态码: $httpStatusCode, 业务错误码: $errorCode, 错误消息: $message');
+    // 可以执行特定的错误处理逻辑
+    Get.snackbar('登录失败', message, snackPosition: SnackPosition.BOTTOM);
+  },
+).extractModel<TokenInfo>(TokenInfo.fromJson);
+```
+
+**方式 2：使用链式调用的 `onFailure`**
+
+```dart
+// 使用链式调用的 onFailure
+final tokenInfo = await http
+  .send(
+    method: hm.post,
+    path: '/auth/login',
+    data: {'email': email, 'code': code},
+  )
+  .onFailure((httpStatusCode, errorCode, message) {
+    // 注意：401 错误不会走到这里（如果设置了 on401Unauthorized）
+    print('🔍 [错误信息] HTTP 状态码: $httpStatusCode, 业务错误码: $errorCode, 错误消息: $message');
+  })
+  .extractModel<TokenInfo>(TokenInfo.fromJson);
+```
+
+**两种方式的区别：**
+- `send` 的 `onFailure`：参数集中，更直观，适合工具类封装
+- 链式调用的 `onFailure`：更灵活，可以在链式调用的任意位置使用
+
+### 全局错误处理
+
+如果不需要专门处理 401，可以只使用全局 `onFailure`：
 
 ```dart
 HttpUtil.configure(

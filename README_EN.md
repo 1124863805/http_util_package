@@ -130,6 +130,7 @@ if (token != null) saveToken(token);
 - `skipDeduplication` - Whether to skip deduplication (default false), if true, will execute directly even if deduplication is enabled
 - `baseUrl` - Directly specify baseUrl (optional, highest priority), will override default baseUrl and service configuration
 - `service` - Use service name defined in `serviceBaseUrls` (optional), e.g., 'files', 'cdn', etc.
+- `onFailure` - Request-level error handling callback (optional), if provided, will take priority over `on401Unauthorized` and global `onFailure`
 
 **http.isLoading getter (Recommended for Chain Calls):**
 - `http.isLoading` - Returns `HttpUtilWithLoading` instance for chain calls
@@ -1019,6 +1020,134 @@ print('All connections completed');
 - Resources are automatically cleaned up on connection failure, no manual handling needed
 - Call `disconnectAll()` in Controller's `onClose` to automatically clean up all connections
 - Supports maintaining multiple connections simultaneously, each with a unique ID
+
+## Error Handling
+
+### Error Handling Priority
+
+The package provides a multi-level error handling mechanism with priority from high to low:
+
+1. **Chain call `onFailure`** (highest priority)
+   - If chain call `onFailure` is used, the error will be marked as handled
+   - Other error handling callbacks will not be called
+
+2. **`send` `onFailure`** (request level)
+   - If `onFailure` parameter is passed to `send` method, this callback will be used with priority
+   - Suitable for scenarios where specific error handling is needed for a particular request
+   - After being called, it will automatically mark the error as handled, preventing duplicate calls to global `onFailure`
+
+3. **`on401Unauthorized`** (specifically handles 401 errors)
+   - If `on401Unauthorized` is set, 401 errors will use this callback with priority
+   - Automatic deduplication: within the `errorDeduplicationWindow` time window (default 5 seconds), 401 errors will only be handled once
+   - 401 errors will not call the `onFailure` callback
+
+4. **Global `onFailure`** (fallback handling)
+   - Handles other errors (non-401) or 401 when `on401Unauthorized` is not set
+
+### 401 Error Handling (Recommended)
+
+**Problem Scenario**: When first entering the application, multiple interfaces may be requested concurrently. If the token expires, all requests will return 401, causing:
+- Multiple snackbars popping up simultaneously
+- Possible multiple redirects to login page
+- Poor user experience
+
+**Solution**: Use `on401Unauthorized` callback with automatic deduplication at package level:
+
+```dart
+HttpUtil.configure(
+  HttpConfig(
+    baseUrl: 'https://api.example.com/v1',
+    // 401 specific handling with automatic deduplication (only handles once within 5 seconds)
+    on401Unauthorized: () {
+      // Clear login info
+      AuthUtil.clearLoginInfo();
+      // Navigate to login page (only navigates once)
+      Get.offAllNamed(Routes.LOGIN);
+      // Show prompt (only shows once)
+      Get.snackbar('Tip', 'Login expired, please login again');
+    },
+    // Handle other errors (non-401)
+    onFailure: (httpStatusCode, errorCode, message) {
+      // 401 will not reach here
+      Get.snackbar('Error', message);
+    },
+    // Optional: customize deduplication time window (default 5 seconds)
+    errorDeduplicationWindow: Duration(seconds: 5),
+  ),
+);
+```
+
+**Advantages**:
+- ✅ Automatic deduplication: concurrent 401 errors within the time window will only be handled once
+- ✅ Clear logic: 401 and other errors are handled separately
+- ✅ Simple to use: just set the callback, no need to worry about deduplication logic
+
+### Request-Level Error Handling
+
+If you need to handle errors for specific requests, there are two ways:
+
+**Method 1: Use `send` `onFailure` parameter (Recommended)**
+
+```dart
+// Pass onFailure parameter directly in send method
+final tokenInfo = await http.send(
+  method: hm.post,
+  path: '/auth/login',
+  data: {'email': email, 'code': code},
+  onFailure: (httpStatusCode, errorCode, message) {
+    // Print error info for debugging
+    print('🔍 [Login Error] HTTP Status Code: $httpStatusCode, Business Error Code: $errorCode, Error Message: $message');
+    // Can execute specific error handling logic
+    Get.snackbar('Login Failed', message, snackPosition: SnackPosition.BOTTOM);
+  },
+).extractModel<TokenInfo>(TokenInfo.fromJson);
+```
+
+**Method 2: Use chain call `onFailure`**
+
+```dart
+// Use chain call onFailure
+final tokenInfo = await http
+  .send(
+    method: hm.post,
+    path: '/auth/login',
+    data: {'email': email, 'code': code},
+  )
+  .onFailure((httpStatusCode, errorCode, message) {
+    // Note: 401 errors will not reach here (if on401Unauthorized is set)
+    print('🔍 [Error Info] HTTP Status Code: $httpStatusCode, Business Error Code: $errorCode, Error Message: $message');
+  })
+  .extractModel<TokenInfo>(TokenInfo.fromJson);
+```
+
+**Difference between the two methods**:
+- `send` `onFailure`: Parameters are centralized, more intuitive, suitable for utility class encapsulation
+- Chain call `onFailure`: More flexible, can be used at any position in chain calls
+
+### Global Error Handling
+
+If you don't need to specifically handle 401, you can only use global `onFailure`:
+
+```dart
+HttpUtil.configure(
+  HttpConfig(
+    baseUrl: 'https://api.example.com/v1',
+    onFailure: (httpStatusCode, errorCode, message) {
+      // All errors (including 401) go here
+      if (httpStatusCode == 401) {
+        // Handle 401, but need to implement deduplication logic yourself
+        AuthUtil.clearLoginInfo();
+        Get.offAllNamed(Routes.LOGIN);
+      } else {
+        // Handle other errors
+        Get.snackbar('Error', message);
+      }
+    },
+  ),
+);
+```
+
+**Note**: If you only use `onFailure` to handle 401, you need to implement deduplication logic yourself to avoid duplicate handling when concurrent requests occur.
 
 ## Custom Response Parser
 
