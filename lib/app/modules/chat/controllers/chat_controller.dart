@@ -2,17 +2,18 @@ import 'package:get/get.dart';
 import 'package:dio_http_util/http_util.dart';
 
 class ChatController extends GetxController {
-  // 单个连接演示
   final sseMessage = ''.obs; // SSE 消息内容
   final isSSEConnected = false.obs; // SSE 连接状态
 
-  // 多个连接演示
-  final sseMessage1 = ''.obs; // 连接1的消息内容
-  final sseMessage2 = ''.obs; // 连接2的消息内容
-  final sseMessage3 = ''.obs; // 连接3的消息内容
-  final isMultipleSSEConnected = false.obs; // 多连接状态
+  SSEManager? _sseManager; // SSE 连接管理器
 
-  SSEManager? _sseManager; // SSE 连接管理器（支持多连接）
+  // Coze API 配置
+  static const String _cozeBaseUrl = 'https://859vy9xjm9.coze.site';
+  static const String _cozePath = '/stream_run';
+  static const String _cozeToken =
+      'eyJhbGciOiJSUzI1NiIsImtpZCI6ImIyNjM4YTkzLTAwZjgtNDAwZi04NTEyLWJjMDQ3MTYyZDU3ZiJ9.eyJpc3MiOiJodHRwczovL2FwaS5jb3plLmNuIiwiYXVkIjpbImRqdDgwaGJaekpJaUdIVE9WaFYyZXlNWGNQNmprd0JkIl0sImV4cCI6ODIxMDI2Njg3Njc5OSwiaWF0IjoxNzY4NTMxODUyLCJzdWIiOiJzcGlmZmU6Ly9hcGkuY296ZS5jbi93b3JrbG9hZF9pZGVudGl0eS9pZDo3NTk1NTAyMzQ4NjcyMTcyMDQyIiwic3JjIjoiaW5ib3VuZF9hdXRoX2FjY2Vzc190b2tlbl9pZDo3NTk1Nzg2NDY3MTc2MDg3NjAzIn0.YUFn-2aMmjEN6k4YXlQr3vWgfIvMtN3nqI1mMWGWikbYVybmzQEoRl1eMtO53EIOklHYvvcicDFxqCH2G5Zz4Zjd91LjpAjiTTLd2RqRI9lgke5NsywbHl8bte2_z0ehWSvmXnhbknSQ8EK01tWxzcfU48GIfA9HmyNYgI_tSn61a6bd_3cYOmvCvMyuAzkEcKTPsMgt0gyeGsWaPSYgdS4H31emaWG_HuVk5_kiQRlWU9ooIVFSxpwyTo_E_R5oEzRxNrdtl01qPq3W87-k9Ubjw0og-cpcMp2M43VCinP05LvDRtdrwaNM3WG0Dfw_6oysE7sy6M7-8QKbEqq10Q';
+  static const String _sessionId = 'qxJchuPEtGl3vGOBWJrwV';
+  static const int _projectId = 7595495638419341362;
 
   @override
   void onInit() {
@@ -33,7 +34,7 @@ class ChatController extends GetxController {
     super.onClose();
   }
 
-  /// 单个连接演示：连接 SSE 并发送问题
+  /// 连接 SSE 并发送问题
   Future<void> connectSSE(String question) async {
     if (_sseManager == null) {
       _sseManager = http.sseManager();
@@ -43,12 +44,31 @@ class ChatController extends GetxController {
       isSSEConnected.value = true;
       sseMessage.value = ''; // 清空之前的消息
 
-      // 使用 SSE 管理器建立单个连接
+      // 构建请求体（按照 Coze API 格式）
+      final requestData = {
+        'content': {
+          'query': {
+            'prompt': [
+              {
+                'type': 'text',
+                'content': {'text': question},
+              },
+            ],
+          },
+        },
+        'type': 'query',
+        'session_id': _sessionId,
+        'project_id': _projectId,
+      };
+
+      // 使用 SSE 管理器建立连接
       await _sseManager!.connect(
         id: 'chat', // 连接唯一标识符
-        path: '/ai/chat/stream',
+        baseUrl: _cozeBaseUrl,
+        path: _cozePath,
         method: 'POST',
-        data: {'question': question},
+        data: requestData,
+        headers: {'Authorization': 'Bearer $_cozeToken'},
         onData: (event) {
           // 累积消息内容
           sseMessage.value += event.data;
@@ -71,124 +91,11 @@ class ChatController extends GetxController {
     }
   }
 
-  /// 单个连接演示：断开 SSE 连接
+  /// 断开 SSE 连接
   Future<void> disconnectSSE() async {
     if (_sseManager != null) {
       await _sseManager!.disconnect('chat');
     }
     isSSEConnected.value = false;
   }
-
-  /// 多个连接演示：同时建立多个 SSE 连接（都调用同一个接口）
-  Future<void> connectMultipleSSE() async {
-    if (_sseManager == null) {
-      _sseManager = http.sseManager();
-    }
-
-    try {
-      isMultipleSSEConnected.value = true;
-      // 清空所有消息
-      sseMessage1.value = '';
-      sseMessage2.value = '';
-      sseMessage3.value = '';
-
-      // 连接 1：调用 /ai/chat/stream，八字问题1
-      await _sseManager!.connect(
-        id: 'chat1',
-        path: '/ai/chat/stream',
-        method: 'POST',
-        data: {'question': '什么是八字？'},
-        onData: (event) {
-          print('🔹 连接1收到数据: ${event.data}');
-          sseMessage1.value += event.data;
-        },
-        onError: (error) {
-          print('❌ 连接1错误: $error');
-          Get.snackbar(
-            '错误',
-            '连接1错误: $error',
-            snackPosition: SnackPosition.BOTTOM,
-          );
-        },
-        onDone: () {
-          print('🔹 连接1完成');
-        },
-      );
-
-      // 连接 2：调用 /ai/chat/stream，八字问题2
-      await _sseManager!.connect(
-        id: 'chat2',
-        path: '/ai/chat/stream',
-        method: 'POST',
-        data: {'question': '八字如何看财运？'},
-        onData: (event) {
-          sseMessage2.value += event.data;
-        },
-        onError: (error) {
-          print('❌ 连接2错误: $error');
-          Get.snackbar(
-            '错误',
-            '连接2错误: $error',
-            snackPosition: SnackPosition.BOTTOM,
-          );
-        },
-        onDone: () {
-          print('🔹 连接2完成');
-        },
-      );
-
-      // 连接 3：调用 /ai/chat/stream，八字问题3
-      await _sseManager!.connect(
-        id: 'chat3',
-        path: '/ai/chat/stream',
-        method: 'POST',
-        data: {'question': '八字中的五行是什么？'},
-        onData: (event) {
-          sseMessage3.value += event.data;
-        },
-        onError: (error) {
-          print('❌ 连接3错误: $error');
-          Get.snackbar(
-            '错误',
-            '连接3错误: $error',
-            snackPosition: SnackPosition.BOTTOM,
-          );
-        },
-        onDone: () {
-          print('🔹 连接3完成');
-        },
-      );
-
-      // 等待所有连接完成（在后台执行，不阻塞 UI）
-      _waitForAllConnectionsDone();
-    } catch (e) {
-      print('❌ 多连接失败: $e');
-      isMultipleSSEConnected.value = false;
-      Get.snackbar('错误', '多连接失败: $e', snackPosition: SnackPosition.BOTTOM);
-    }
-  }
-
-  /// 等待所有连接完成（后台执行）
-  Future<void> _waitForAllConnectionsDone() async {
-    try {
-      // 等待所有连接完成
-      await _sseManager?.waitForAllConnectionsDone();
-      print('✅ 所有连接都已完成');
-      isMultipleSSEConnected.value = false;
-      Get.snackbar('完成', '所有 SSE 连接都已完成', snackPosition: SnackPosition.BOTTOM);
-    } catch (e) {
-      print('❌ 等待连接完成时出错: $e');
-    }
-  }
-
-  /// 多个连接演示：断开所有连接
-  Future<void> disconnectMultipleSSE() async {
-    if (_sseManager != null) {
-      await _sseManager!.disconnectAll();
-    }
-    isMultipleSSEConnected.value = false;
-  }
-
-  /// 获取连接数量（用于显示）
-  int get connectionCount => _sseManager?.connectionCount ?? 0;
 }
