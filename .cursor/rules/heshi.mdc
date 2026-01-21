@@ -1,0 +1,36 @@
+# 合十 App 开发规范
+
+## 多语言规范
+
+### 核心规则
+1. **翻译文件同步**：修改翻译时，必须在所有语言文件中添加/修改相同的键
+   - 文件位置：`assets/translations/`
+   - 支持语言：zh_CN, zh_TW, en_US, ja_JP, ko_KR
+
+2. **添加新翻译键**
+   - 在所有语言文件中添加相同的键
+   - 运行：`./scripts/generate_i18n.sh`
+   - 代码中使用：`context.tr(LocaleKeys.xxx)`
+
+3. **代码使用**
+   - ✅ 必须：`context.tr(LocaleKeys.xxx)`
+   - ❌ 禁止：写死中文字符串、使用字符串键、使用 `'key'.tr()`
+
+4. **添加新语言**
+   - 创建翻译文件 → 更新 `LocaleService.supportedLocales` → 更新 `main.dart` → 更新 `getLanguageName()` → 更新 iOS `Info.plist` → 运行生成脚本
+
+### 禁止事项
+- ❌ 写死中文字符串
+- ❌ 只在一个语言文件中添加键
+- ❌ 使用字符串作为翻译键
+- ❌ 使用 `'key'.tr()`
+
+### 必须事项
+- ✅ 所有语言文件同步更新
+- ✅ 使用 `context.tr(LocaleKeys.xxx)`
+- ✅ 添加新键后运行生成脚本
+
+### 快速命令
+```bash
+./scripts/generate_i18n.sh
+```
