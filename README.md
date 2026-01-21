@@ -2,12 +2,7 @@
 
 基于 Dio 封装的 HTTP 请求工具类，支持配置化的请求头注入和统一的错误处理。
 
-[![pub package](https://img.shields.io/pub/v/dio_http_util.svg)](https://pub.dev/packages/dio_http_util)
-[![GitHub](https://img.shields.io/github/stars/1124863805/http_util_package?style=social)](https://github.com/1124863805/http_util_package)
-
-- 📦 [Pub.dev](https://pub.dev/packages/dio_http_util)
-- 🐙 [GitHub](https://github.com/1124863805/http_util_package)
-- 📖 [English Documentation](README_EN.md) | [中文文档](README.md)
+- 🐙 [GitHub](https://codeup.aliyun.com/623ab8b8581fc62661c8ea92/max_heyun_app.git)
 
 ## 特性
 
