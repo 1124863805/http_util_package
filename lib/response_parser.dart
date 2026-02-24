@@ -1,15 +1,33 @@
-import 'package:dio/dio.dart' as dio_package;
 import 'response.dart';
 
+/// 原始 HTTP 响应（包内封装，不暴露底层实现）
+/// 解析器仅依赖此类型，调用方无需依赖 Dio
+class RawHttpResponse {
+  /// HTTP 状态码
+  final int? statusCode;
+
+  /// 响应体
+  final dynamic data;
+
+  /// 请求路径（用于 PathBasedResponseParser 等按路径选择解析器）
+  final String path;
+
+  const RawHttpResponse({
+    required this.statusCode,
+    required this.data,
+    required this.path,
+  });
+}
+
 /// 响应解析器接口
-/// 用户必须实现此接口来定义如何将 Dio Response 转换为用户定义的 Response
+/// 用户必须实现此接口来定义如何将原始 HTTP 响应转换为用户定义的 Response
 ///
 /// 示例：
 /// ```dart
 /// class MyResponseParser implements ResponseParser {
 ///   @override
-///   Response<T> parse<T>(dio_package.Response response) {
-///     final data = response.data as Map<String, dynamic>;
+///   Response<T> parse<T>(RawHttpResponse raw) {
+///     final data = raw.data as Map<String, dynamic>;
 ///     return MyResponse(
 ///       success: data['status'] == 'success',
 ///       error: data['error'] as String?,
@@ -20,9 +38,9 @@ import 'response.dart';
 /// ```
 abstract class ResponseParser {
   /// 解析响应
-  /// [response] Dio 的原始响应对象
+  /// [raw] 原始 HTTP 响应（statusCode、data、path）
   /// 返回用户定义的 Response，必须处理所有可能的响应结构
-  Response<T> parse<T>(dio_package.Response response);
+  Response<T> parse<T>(RawHttpResponse raw);
 }
 
 /// 路径匹配规则
@@ -57,18 +75,15 @@ class PathBasedResponseParser implements ResponseParser {
   });
 
   @override
-  Response<T> parse<T>(dio_package.Response response) {
-    // 从请求选项中获取路径
-    final path = response.requestOptions.path;
-
+  Response<T> parse<T>(RawHttpResponse raw) {
     // 查找匹配的解析器
     for (final matcher in matchers) {
-      if (matcher.matches(path)) {
-        return matcher.parser.parse<T>(response);
+      if (matcher.matches(raw.path)) {
+        return matcher.parser.parse<T>(raw);
       }
     }
 
     // 使用默认解析器
-    return defaultParser.parse<T>(response);
+    return defaultParser.parse<T>(raw);
   }
 }

@@ -42,21 +42,36 @@ packages:
     source: hosted
     version: "1.19.1"
   crypto:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: crypto
       sha256: c8ea0233063ba03258fbcf2ca4d6dadfefe14f02fab57702265467a19f27fadf
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "3.0.7"
-  dio:
+  cupertino_icons:
     dependency: "direct main"
+    description:
+      name: cupertino_icons
+      sha256: ba631d1c7f7bef6b729a622b7b752645a2d076dba9976925b8f25725a30e1ee6
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "1.0.8"
+  dio:
+    dependency: transitive
     description:
       name: dio
       sha256: b9d46faecab38fc8cc286f80bc4d61a3bb5d4ac49e51ed877b4d6706efe57b25
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "5.9.1"
+  dio_http_util:
+    dependency: "direct main"
+    description:
+      path: ".."
+      relative: true
+    source: path
+    version: "1.5.1"
   dio_web_adapter:
     dependency: transitive
     description:
@@ -82,10 +97,10 @@ packages:
     dependency: "direct dev"
     description:
       name: flutter_lints
-      sha256: "9e8c3858111da373efc5aa341de011d9bd23e2c5c5e0c62bccf32438e192d7b1"
+      sha256: "3105dc8492f6183fb076ccf1f351ac3d60564bff92e20bfc4af9cc1651f4e7e1"
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "3.0.2"
+    version: "6.0.0"
   flutter_test:
     dependency: "direct dev"
     description: flutter
@@ -127,10 +142,10 @@ packages:
     dependency: transitive
     description:
       name: lints
-      sha256: cbf8d4b858bb0134ef3ef87841abdf8d63bfc255c266b7bf6b39daa1085c4290
+      sha256: "12f842a479589fea194fe5c5a3095abc7be0c1f2ddfa9a0e76aed1dbd26a87df"
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "3.0.0"
+    version: "6.1.0"
   matcher:
     dependency: transitive
     description:
@@ -257,5 +272,5 @@ packages:
     source: hosted
     version: "1.1.1"
 sdks:
-  dart: ">=3.8.0-0 <4.0.0"
+  dart: ">=3.10.8 <4.0.0"
   flutter: ">=3.18.0-18.0.pre.54"

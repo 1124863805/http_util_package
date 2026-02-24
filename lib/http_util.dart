@@ -16,8 +16,4 @@ export 'sse/sse_manager.dart'; // SSE 连接管理器（多连接管理）
 export 'request_deduplicator.dart'; // 请求去重/防抖管理器
 export 'request_queue.dart'; // 请求队列管理器
 
-// 导出 Dio 类型，方便直接使用
-// 注意：隐藏 Dio 的 Response 和 LogInterceptor，使用我们自己的实现
-export 'package:dio/dio.dart' hide Response, LogInterceptor;
-export 'package:dio/dio.dart'
-    show Dio, Options, CancelToken, ProgressCallback, FormData;
+// 不导出 Dio，调用方仅依赖本包的 RawHttpResponse / Response 等类型

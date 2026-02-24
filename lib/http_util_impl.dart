@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:dio/dio.dart' as dio_package;
 import 'http_config.dart';
 import 'response.dart';
+import 'response_parser.dart';
 import 'http_method.dart';
 import 'log_interceptor.dart';
 import 'simple_error_response.dart';
@@ -620,7 +621,12 @@ extension HttpUtilSafeCall on HttpUtil {
           throw StateError('HttpUtil 未配置，请先调用 HttpUtil.configure() 进行配置');
         }
 
-        final response = config.responseParser.parse<T>(rawResponse);
+        final raw = RawHttpResponse(
+          statusCode: rawResponse.statusCode,
+          data: rawResponse.data,
+          path: rawResponse.requestOptions.path,
+        );
+        final response = config.responseParser.parse<T>(raw);
 
         // 自动处理错误（如果用户实现了 handleError 方法）
         if (!response.isSuccess) {
@@ -907,7 +913,12 @@ extension HttpUtilFileUpload on HttpUtil {
         throw StateError('HttpUtil 未配置，请先调用 HttpUtil.configure() 进行配置');
       }
 
-      final response = config.responseParser.parse<T>(rawResponse);
+      final raw = RawHttpResponse(
+        statusCode: rawResponse.statusCode,
+        data: rawResponse.data,
+        path: rawResponse.requestOptions.path,
+      );
+      final response = config.responseParser.parse<T>(raw);
 
       // 自动处理错误（如果用户实现了 handleError 方法）
       if (!response.isSuccess) {

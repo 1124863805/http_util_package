@@ -32,7 +32,7 @@ class HttpConfig {
   final Future<Map<String, String>> Function()? dynamicHeaderBuilder;
 
   /// 响应解析器（可选，默认使用 StandardResponseParser）
-  /// 用于将 Dio Response 转换为用户定义的 Response
+  /// 用于将原始 HTTP 响应（RawHttpResponse）转换为用户定义的 Response
   ///
   /// 如果不提供，将使用默认的 StandardResponseParser（处理标准结构：{code: int, message: String, data: dynamic}）
   ///
