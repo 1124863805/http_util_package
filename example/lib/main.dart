@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:dio_http_util/http_util.dart';
+import 'tyme4/tyme.dart';
+import 'calendar_page.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -77,6 +79,14 @@ class _DemoPageState extends State<DemoPage> {
     });
   }
 
+  void _runTyme4Demo() {
+    SolarDay solarDay = SolarDay.fromYmd(2026, 2, 25);
+    setState(() {
+      _result =
+          '$solarDay\n${solarDay.getLunarDay()}\n${solarDay.getRabByungDay()}';
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -93,6 +103,22 @@ class _DemoPageState extends State<DemoPage> {
               ElevatedButton(
                 onPressed: _sendRequest,
                 child: const Text('发送 GET 请求'),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: _runTyme4Demo,
+                child: const Text('公历/农历/藏历 Demo'),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const CalendarPage(),
+                    ),
+                  );
+                },
+                child: const Text('日历（左右滑动）'),
               ),
               const SizedBox(height: 24),
               Expanded(
