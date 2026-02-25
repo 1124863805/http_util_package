@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart' as dio_package;
 import 'http_config.dart';
@@ -18,6 +20,9 @@ import 'sse/sse_manager.dart';
 import 'widgets/loading_widget.dart';
 import 'request_deduplicator.dart';
 import 'request_queue.dart';
+
+/// 供 [compute] 使用的顶层 JSON 解码函数（避免在主 isolate 解析大 JSON 导致 UI 卡顿）
+dynamic _decodeJsonInIsolate(String s) => jsonDecode(s);
 
 /// HTTP 请求工具类
 /// 基于 Dio 封装，支持配置化的请求头注入
@@ -594,11 +599,16 @@ extension HttpUtilSafeCall on HttpUtil {
         final resolvedBaseUrl =
             HttpUtilSafeCall._resolveBaseUrl(baseUrl, service);
 
-        // 构建请求选项，包含特定请求头
-        dio_package.Options? options;
-        if (headers != null && headers.isNotEmpty) {
-          options = dio_package.Options(headers: headers);
+        final config = _config;
+        if (config == null) {
+          throw StateError('HttpUtil 未配置，请先调用 HttpUtil.configure() 进行配置');
         }
+
+        // 构建请求选项（responseType.plain 拿原始字符串，再在 isolate 中 decode 避免 UI 卡顿）
+        final options = dio_package.Options(
+          headers: headers ?? const {},
+          responseType: dio_package.ResponseType.plain,
+        );
 
         // 直接调用 request 方法获取原始 response
         final rawResponse = await HttpUtil.instance.request<T>(
@@ -615,15 +625,19 @@ extension HttpUtilSafeCall on HttpUtil {
           return _handleNetworkError<T>();
         }
 
-        // 使用用户配置的解析器解析响应
-        final config = _config;
-        if (config == null) {
-          throw StateError('HttpUtil 未配置，请先调用 HttpUtil.configure() 进行配置');
+        // 在 isolate 中解码 JSON，避免主线程解析大 JSON 导致 UI 卡顿
+        dynamic responseData = rawResponse.data;
+        if (responseData is String) {
+          try {
+            responseData = await compute<String, dynamic>(_decodeJsonInIsolate, responseData);
+          } catch (_) {
+            // 解码失败保持原样，由解析器返回格式错误
+          }
         }
 
         final raw = RawHttpResponse(
           statusCode: rawResponse.statusCode,
-          data: rawResponse.data,
+          data: responseData,
           path: rawResponse.requestOptions.path,
         );
         final response = config.responseParser.parse<T>(raw);
@@ -885,11 +899,16 @@ extension HttpUtilFileUpload on HttpUtil {
         };
       }
 
-      // 构建请求选项，包含特定请求头
-      dio_package.Options? options;
-      if (headers != null && headers.isNotEmpty) {
-        options = dio_package.Options(headers: headers);
+      final config = HttpUtilSafeCall._config;
+      if (config == null) {
+        throw StateError('HttpUtil 未配置，请先调用 HttpUtil.configure() 进行配置');
       }
+
+      // 构建请求选项（responseType.plain 拿原始字符串，再在 isolate 中 decode 避免 UI 卡顿）
+      final options = dio_package.Options(
+        headers: headers ?? const {},
+        responseType: dio_package.ResponseType.plain,
+      );
 
       // 调用 request 方法以支持进度回调
       final rawResponse = await HttpUtil.instance.request<T>(
@@ -907,15 +926,19 @@ extension HttpUtilFileUpload on HttpUtil {
         return _handleNetworkError<T>();
       }
 
-      // 使用用户配置的解析器解析响应
-      final config = HttpUtilSafeCall._config;
-      if (config == null) {
-        throw StateError('HttpUtil 未配置，请先调用 HttpUtil.configure() 进行配置');
+      // 在 isolate 中解码 JSON，避免主线程解析大 JSON 导致 UI 卡顿
+      dynamic responseData = rawResponse.data;
+      if (responseData is String) {
+        try {
+          responseData = await compute<String, dynamic>(_decodeJsonInIsolate, responseData);
+        } catch (_) {
+          // 解码失败保持原样，由解析器返回格式错误
+        }
       }
 
       final raw = RawHttpResponse(
         statusCode: rawResponse.statusCode,
-        data: rawResponse.data,
+        data: responseData,
         path: rawResponse.requestOptions.path,
       );
       final response = config.responseParser.parse<T>(raw);
