@@ -45,27 +45,47 @@ class _RestWorkBadge extends StatelessWidget {
   }
 }
 
-/// 基于 tyme4 的公历日历，第一行 日 一 二 三 四 五 六，Grid 布局，左右滑动切换月份
-class CalendarPage extends StatefulWidget {
-  const CalendarPage({super.key});
+/// 万年历组件（可嵌入任意页面），范围 1900-2099，左右滑动切月
+class PerpetualCalendar extends StatefulWidget {
+  /// 初始展示的日期，null 为今天
+  final DateTime? initialDate;
+
+  /// 当前选中日期，null 则内部维护
+  final DateTime? selectedDate;
+
+  /// 选中日期回调；若为 null 则仅内部更新
+  final ValueChanged<DateTime>? onDateSelected;
+
+  /// 日历格子区域最大高度
+  final double? maxHeight;
+
+  const PerpetualCalendar({
+    super.key,
+    this.initialDate,
+    this.selectedDate,
+    this.onDateSelected,
+    this.maxHeight,
+  });
 
   @override
-  State<CalendarPage> createState() => _CalendarPageState();
+  State<PerpetualCalendar> createState() => PerpetualCalendarState();
 }
 
-class _CalendarPageState extends State<CalendarPage> {
-  /// 万年历固定范围 1900-2099，共 200 年 = 2400 月
+/// 供外部通过 GlobalKey<PerpetualCalendarState> 调用：上一月、下一月、选择年月
+class PerpetualCalendarState extends State<PerpetualCalendar> {
   static const int _baseYear = 1900;
   static const int _endYear = 2099;
   static const int _totalMonths = (_endYear - _baseYear + 1) * 12;
+  static const List<String> _weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+  static const double _calendarMaxHeight = 400;
 
   late PageController _pageController;
   int _currentPage = 0;
   late DateTime _selectedDate;
 
   int get _initialPage {
-    final now = DateTime.now();
-    final page = (now.year - _baseYear) * 12 + (now.month - 1);
+    final date = widget.initialDate ?? DateTime.now();
+    final page = (date.year - _baseYear) * 12 + (date.month - 1);
     return page.clamp(0, _totalMonths - 1);
   }
 
@@ -75,11 +95,13 @@ class _CalendarPageState extends State<CalendarPage> {
     return (year, month);
   }
 
+  DateTime get _effectiveSelectedDate => widget.selectedDate ?? _selectedDate;
+
   @override
   void initState() {
     super.initState();
     _currentPage = _initialPage;
-    _selectedDate = DateTime.now();
+    _selectedDate = widget.initialDate ?? widget.selectedDate ?? DateTime.now();
     _pageController = PageController(initialPage: _initialPage);
   }
 
@@ -90,7 +112,11 @@ class _CalendarPageState extends State<CalendarPage> {
   }
 
   void _onSelectDate(DateTime date) {
-    setState(() => _selectedDate = date);
+    if (widget.onDateSelected != null) {
+      widget.onDateSelected!(date);
+    } else {
+      setState(() => _selectedDate = date);
+    }
     final targetPage = (date.year - _baseYear) * 12 + (date.month - 1);
     final page = targetPage.clamp(0, _totalMonths - 1);
     if (page == _currentPage || !_pageController.hasClients) return;
@@ -101,10 +127,8 @@ class _CalendarPageState extends State<CalendarPage> {
     );
   }
 
-  static const List<String> _weekdays = ['日', '一', '二', '三', '四', '五', '六'];
-  static const double _calendarMaxHeight = 400;
-
-  void _goPrevMonth() {
+  /// 上一月，外部可通过 key.currentState?.goPrevMonth() 调用
+  void goPrevMonth() {
     if (!_pageController.hasClients || _currentPage <= 0) return;
     _pageController.animateToPage(
       _currentPage - 1,
@@ -113,7 +137,8 @@ class _CalendarPageState extends State<CalendarPage> {
     );
   }
 
-  void _goNextMonth() {
+  /// 下一月，外部可通过 key.currentState?.goNextMonth() 调用
+  void goNextMonth() {
     if (!_pageController.hasClients || _currentPage >= _totalMonths - 1) return;
     _pageController.animateToPage(
       _currentPage + 1,
@@ -122,7 +147,8 @@ class _CalendarPageState extends State<CalendarPage> {
     );
   }
 
-  Future<void> _showYearMonthPicker() async {
+  /// 弹出年月选择器，外部可通过 key.currentState?.showYearMonthPicker() 调用
+  Future<void> showYearMonthPicker() async {
     final (year, month) = _pageToYearMonth(_currentPage);
     final picked = await showDialog<(int year, int month)>(
       context: context,
@@ -141,10 +167,18 @@ class _CalendarPageState extends State<CalendarPage> {
                     DropdownButtonFormField<int>(
                       value: selYear,
                       decoration: const InputDecoration(labelText: '年'),
-                      items: List.generate(
-                        _endYear - _baseYear + 1,
-                        (i) => _baseYear + i,
-                      ).map((y) => DropdownMenuItem(value: y, child: Text('$y年'))).toList(),
+                      items:
+                          List.generate(
+                                _endYear - _baseYear + 1,
+                                (i) => _baseYear + i,
+                              )
+                              .map(
+                                (y) => DropdownMenuItem(
+                                  value: y,
+                                  child: Text('$y年'),
+                                ),
+                              )
+                              .toList(),
                       onChanged: (v) {
                         if (v != null) setDialogState(() => selYear = v);
                       },
@@ -153,7 +187,12 @@ class _CalendarPageState extends State<CalendarPage> {
                     DropdownButtonFormField<int>(
                       value: selMonth,
                       decoration: const InputDecoration(labelText: '月'),
-                      items: List.generate(12, (i) => i + 1).map((m) => DropdownMenuItem(value: m, child: Text('$m月'))).toList(),
+                      items: List.generate(12, (i) => i + 1)
+                          .map(
+                            (m) =>
+                                DropdownMenuItem(value: m, child: Text('$m月')),
+                          )
+                          .toList(),
                       onChanged: (v) {
                         if (v != null) setDialogState(() => selMonth = v);
                       },
@@ -162,8 +201,15 @@ class _CalendarPageState extends State<CalendarPage> {
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('取消')),
-                FilledButton(onPressed: () => Navigator.of(context).pop((selYear, selMonth)), child: const Text('确定')),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: () =>
+                      Navigator.of(context).pop((selYear, selMonth)),
+                  child: const Text('确定'),
+                ),
               ],
             );
           },
@@ -171,7 +217,10 @@ class _CalendarPageState extends State<CalendarPage> {
       },
     );
     if (picked != null && mounted && _pageController.hasClients) {
-      final page = ((picked.$1 - _baseYear) * 12 + (picked.$2 - 1)).clamp(0, _totalMonths - 1);
+      final page = ((picked.$1 - _baseYear) * 12 + (picked.$2 - 1)).clamp(
+        0,
+        _totalMonths - 1,
+      );
       _pageController.animateToPage(
         page,
         duration: const Duration(milliseconds: 280),
@@ -186,89 +235,89 @@ class _CalendarPageState extends State<CalendarPage> {
 
   @override
   Widget build(BuildContext context) {
-    final (year, month) = _pageToYearMonth(_currentPage);
+    final colorScheme = Theme.of(context).colorScheme;
+    final maxH = widget.maxHeight ?? _calendarMaxHeight;
+
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            _calendarHorizontalPadding,
+            4,
+            _calendarHorizontalPadding,
+            2,
+          ),
+          child: Row(
+            children: [
+              for (int i = 0; i < _weekdays.length; i++) ...[
+                if (i > 0) const SizedBox(width: _calendarCrossSpacing),
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      _weekdays[i],
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        fontFamily: _calendarFontFamily,
+                        color: (i == 0 || i == 6)
+                            ? colorScheme.error
+                            : colorScheme.onSurface.withValues(alpha: 0.55),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (_, constraints) {
+              final h = constraints.maxHeight.clamp(0.0, maxH);
+              return SizedBox(
+                height: h,
+                child: PageView.builder(
+                  controller: _pageController,
+                  itemCount: _totalMonths,
+                  onPageChanged: _onPageChanged,
+                  itemBuilder: (context, index) {
+                    final (y, m) = _pageToYearMonth(index);
+                    return _MonthGrid(
+                      year: y,
+                      month: m,
+                      selectedDate: _effectiveSelectedDate,
+                      onSelectDate: _onSelectDate,
+                      availableHeight: h,
+                      availableWidth: constraints.maxWidth,
+                    );
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+
+    return content;
+  }
+}
+
+/// 示例：单独一页展示万年历（Scaffold + 组件）
+class CalendarPage extends StatelessWidget {
+  const CalendarPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
       backgroundColor: colorScheme.surface,
       appBar: AppBar(
-        title: GestureDetector(
-          onTap: _showYearMonthPicker,
-          child: Text('$year年$month月'),
-        ),
+        title: const Text('万年历'),
         backgroundColor: colorScheme.inversePrimary,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.chevron_left),
-            onPressed: _goPrevMonth,
-            tooltip: '上一月',
-          ),
-          IconButton(
-            icon: const Icon(Icons.chevron_right),
-            onPressed: _goNextMonth,
-            tooltip: '下一月',
-          ),
-        ],
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              _calendarHorizontalPadding,
-              4,
-              _calendarHorizontalPadding,
-              2,
-            ),
-            child: Row(
-              children: [
-                for (int i = 0; i < _weekdays.length; i++) ...[
-                  if (i > 0) const SizedBox(width: _calendarCrossSpacing),
-                  Expanded(
-                    child: Center(
-                      child: Text(
-                        _weekdays[i],
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          fontFamily: _calendarFontFamily,
-                          color: (i == 0 || i == 6)
-                              ? colorScheme.error
-                              : colorScheme.onSurface.withValues(alpha: 0.55),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (_, constraints) {
-                final h = constraints.maxHeight.clamp(0.0, _calendarMaxHeight);
-                return SizedBox(
-                  height: h,
-                  child: PageView.builder(
-                    controller: _pageController,
-                    itemCount: _totalMonths,
-                    onPageChanged: _onPageChanged,
-                    itemBuilder: (context, index) {
-                      final (y, m) = _pageToYearMonth(index);
-                      return _MonthGrid(
-                        year: y,
-                        month: m,
-                        selectedDate: _selectedDate,
-                        onSelectDate: _onSelectDate,
-                        availableHeight: h,
-                        availableWidth: constraints.maxWidth,
-                      );
-                    },
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
+      body: const PerpetualCalendar(),
     );
   }
 }
@@ -361,7 +410,11 @@ class _MonthGrid extends StatelessWidget {
     final nextMonth = solarMonth.next(1);
 
     final now = DateTime.now();
-    final cache = <String, (String subtitle, bool showRest, bool showWork, int subtitleType)>{};
+    final cache =
+        <
+          String,
+          (String subtitle, bool showRest, bool showWork, int subtitleType)
+        >{};
     String key(int y, int m, int d) => '$y-$m-$d';
     (String, bool, bool, int) getCached(int y, int m, int d) {
       final k = key(y, m, d);
@@ -398,7 +451,11 @@ class _MonthGrid extends StatelessWidget {
       cellIndex++;
     }
     for (int d = 1; d <= dayCount; d++) {
-      final (subtitle, showRest, showWork, subtitleType) = getCached(year, month, d);
+      final (subtitle, showRest, showWork, subtitleType) = getCached(
+        year,
+        month,
+        d,
+      );
       cells.add(
         _DayCell(
           year: year,
@@ -448,7 +505,9 @@ class _MonthGrid extends StatelessWidget {
     final double aspectRatio = cellWidth / cellHeight;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: _calendarHorizontalPadding),
+      padding: const EdgeInsets.symmetric(
+        horizontal: _calendarHorizontalPadding,
+      ),
       child: SizedBox(
         height: availableHeight,
         child: GridView.count(
@@ -512,14 +571,16 @@ class _DayCell extends StatelessWidget {
     final Color dayColor = todaySelected
         ? onTodayBg
         : isOtherMonth
-            ? colorScheme.onSurface.withValues(alpha: 0.38)
-            : isToday
-                ? colorScheme.onSurface.withValues(alpha: 0.8)
-                : isWeekend
-                    ? colorScheme.error
-                    : colorScheme.onSurface.withValues(alpha: 0.85);
+        ? colorScheme.onSurface.withValues(alpha: 0.38)
+        : isToday
+        ? colorScheme.onSurface.withValues(alpha: 0.8)
+        : isWeekend
+        ? colorScheme.error
+        : colorScheme.onSurface.withValues(alpha: 0.85);
     final bool isHighlighted = todaySelected;
-    final Color highlightTextColor = todaySelected ? onTodayBg : colorScheme.onSurface.withValues(alpha: 0.85);
+    final Color highlightTextColor = todaySelected
+        ? onTodayBg
+        : colorScheme.onSurface.withValues(alpha: 0.85);
 
     // 日期数字：仅选中今天白字加粗，其余固定
     final dayStyle = TextStyle(
@@ -582,7 +643,9 @@ class _DayCell extends StatelessWidget {
           child: Container(
             decoration: BoxDecoration(
               borderRadius: radius,
-              color: todaySelected ? todayBg : (isToday ? colorScheme.surfaceContainerHighest : null),
+              color: todaySelected
+                  ? todayBg
+                  : (isToday ? colorScheme.surfaceContainerHighest : null),
               // 仅选中时红框；未选中今天无边框
               border: Border.all(
                 color: isSelected ? colorScheme.error : Colors.transparent,
@@ -609,7 +672,9 @@ class _DayCell extends StatelessWidget {
                               fontWeight: subtitleWeight,
                               color: todaySelected
                                   ? onTodayBg
-                                  : (isHighlighted ? highlightTextColor : subtitleColor),
+                                  : (isHighlighted
+                                        ? highlightTextColor
+                                        : subtitleColor),
                               fontFamily: _calendarFontFamily,
                             ),
                             maxLines: 1,
