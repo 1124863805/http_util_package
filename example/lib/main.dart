@@ -1,11 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:dio_http_util/http_util.dart';
+import 'package:mop/mop.dart';
 import 'tyme4/tyme.dart';
-import 'calendar.dart';
+import 'calendar/calendar.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-void main() {
+Future<void> _initFinClipMop() async {
+  const sdkKey = 'YF3Bn+VKehedUM0QuaRtnC4Pp2X7T3JoCk10k6jim9E=';
+  const sdkSecret = '8d3d2bf2db966a57';
+  const apiServer = 'https://api.finclip.com';
+  final storeConfig = FinStoreConfig(sdkKey, sdkSecret, apiServer);
+  final config = Config([storeConfig]);
+  config.userId = 'default_user';
+  final uiConfig = UIConfig();
+  uiConfig.isHideAddToDesktopMenu = true;
+  uiConfig.isHideFeedbackAndComplaints = true;
+  await Mop.instance.initSDK(config, uiConfig: uiConfig);
+}
+
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   HttpUtil.configure(
     HttpConfig(
@@ -18,6 +32,7 @@ void main() {
       },
     ),
   );
+  await _initFinClipMop();
   runApp(const MyApp());
 }
 
@@ -105,6 +120,11 @@ class _DemoPageState extends State<DemoPage> {
           ElevatedButton(
             onPressed: _runTyme4Demo,
             child: const Text('公历/农历/藏历 Demo'),
+          ),
+          const SizedBox(height: 12),
+          ElevatedButton(
+            onPressed: () => Mop.instance.openApplet('fc3112235122717445'),
+            child: const Text('打开测试小程序'),
           ),
           const SizedBox(height: 16),
           const Expanded(child: PerpetualCalendar()),

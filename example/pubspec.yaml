@@ -33,6 +33,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   dio_http_util:
     path: ../
+  mop: ^2.48.1
 
 dev_dependencies:
   flutter_test:
