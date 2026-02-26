@@ -94,44 +94,31 @@ class _DemoPageState extends State<DemoPage> {
         title: const Text('dio_http_util Demo'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              ElevatedButton(
-                onPressed: _sendRequest,
-                child: const Text('发送 GET 请求'),
-              ),
-              const SizedBox(height: 12),
-              ElevatedButton(
-                onPressed: _runTyme4Demo,
-                child: const Text('公历/农历/藏历 Demo'),
-              ),
-              const SizedBox(height: 12),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const CalendarPage(),
-                    ),
-                  );
-                },
-                child: const Text('日历（左右滑动）'),
-              ),
-              const SizedBox(height: 24),
-              Expanded(
-                child: SingleChildScrollView(
-                  child: SelectableText(
-                    _result,
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ),
-              ),
-            ],
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ElevatedButton(
+            onPressed: _sendRequest,
+            child: const Text('发送 GET 请求'),
           ),
-        ),
+          const SizedBox(height: 12),
+          ElevatedButton(
+            onPressed: _runTyme4Demo,
+            child: const Text('公历/农历/藏历 Demo'),
+          ),
+          const SizedBox(height: 16),
+          const Expanded(child: PerpetualCalendar()),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 100,
+            child: SingleChildScrollView(
+              child: SelectableText(
+                _result,
+                style: const TextStyle(fontSize: 12),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -304,24 +304,6 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
   }
 }
 
-/// 示例：单独一页展示万年历（Scaffold + 组件）
-class CalendarPage extends StatelessWidget {
-  const CalendarPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      backgroundColor: colorScheme.surface,
-      appBar: AppBar(
-        title: const Text('万年历'),
-        backgroundColor: colorScheme.inversePrimary,
-      ),
-      body: const PerpetualCalendar(),
-    );
-  }
-}
-
 /// 单月日历：第一行 日 一 … 六，下方 6 行用上月/本月/下月补全共 42 格；用格子固定高度撑满，无上下间距
 class _MonthGrid extends StatelessWidget {
   final int year;
