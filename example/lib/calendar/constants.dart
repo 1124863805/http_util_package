@@ -9,7 +9,8 @@ const double calendarHorizontalPadding = 16;
 const double calendarCrossSpacing = 8;
 const double calendarVerticalPadding = 6;
 
-const double weekdayFontSize = 12;
+const double weekdayFontSize = 14;
+const double weekdayLetterSpacing = 0.5;
 const double dayNumberFontSize = 20;
 const double subtitleFontSizeLunar = 10;
 const double subtitleFontSizeTerm = 11;

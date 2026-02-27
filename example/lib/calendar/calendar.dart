@@ -228,6 +228,7 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
                       style: TextStyle(
                         fontSize: weekdayFontSize,
                         fontWeight: FontWeight.w500,
+                        letterSpacing: weekdayLetterSpacing,
                         color: (i == 0 || i == 6)
                             ? calTheme.weekdayColorWeekend
                             : calTheme.weekdayColor,
