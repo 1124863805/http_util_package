@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'http_demo_page.dart';
 import 'calendar_demo_page.dart';
+import 'sticky_calendar_demo_page.dart';
 
 /// 首页：演示入口
 class HomePage extends StatelessWidget {
@@ -34,6 +35,16 @@ class HomePage extends StatelessWidget {
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const CalendarDemoPage()),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _DemoCard(
+            icon: Icons.push_pin,
+            title: '吸顶日历演示',
+            subtitle: '滑动吸顶、自动收起为周视图',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const StickyCalendarDemoPage()),
             ),
           ),
         ],

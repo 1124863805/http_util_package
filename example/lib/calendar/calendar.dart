@@ -25,6 +25,12 @@ class PerpetualCalendar extends StatefulWidget {
   final ValueChanged<DateTime>? onDateSelected;
   final double? maxHeight;
   final PerpetualCalendarController? controller;
+  /// 外部控制收起状态，非 null 时覆盖内部状态并禁用点击切换
+  final bool? collapsed;
+  /// 吸顶模式下由外部传入的约束高度，用于避免溢出/空白
+  final double? constrainedHeight;
+  /// 视图变化回调（滑动切月/切周时），用于吸顶场景保持视图状态
+  final ValueChanged<DateTime>? onViewDateChanged;
 
   const PerpetualCalendar({
     super.key,
@@ -33,6 +39,9 @@ class PerpetualCalendar extends StatefulWidget {
     this.onDateSelected,
     this.maxHeight,
     this.controller,
+    this.collapsed,
+    this.constrainedHeight,
+    this.onViewDateChanged,
   });
 
   @override
@@ -50,7 +59,6 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
       .inDays ~/ 7;
   static const List<String> _weekdays = ['日', '一', '二', '三', '四', '五', '六'];
   static const double _calendarMaxHeight = 400;
-  static double get _collapsedRowHeight => calendarRowHeight;
 
   late PageController _pageController;
   late PageController _weekPageController;
@@ -61,6 +69,13 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
   bool _isToggling = false;
 
   DateTime get _effectiveSelectedDate => widget.selectedDate ?? _selectedDate;
+  bool get _effectiveCollapsed {
+    if (widget.constrainedHeight != null) {
+      final ch = widget.constrainedHeight! - calendarHeaderHeight;
+      return ch < 160;
+    }
+    return widget.collapsed ?? _collapsed;
+  }
 
   (int year, int month) _pageToYearMonth(int index) {
     return (_baseYear + index ~/ 12, index % 12 + 1);
@@ -76,7 +91,13 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
         _totalMonths - 1,
       );
 
-  int get _weekPage => _dateToWeekPageIndex(_viewDate);
+  int get _weekPage {
+    if (widget.constrainedHeight != null) {
+      final ch = widget.constrainedHeight! - calendarHeaderHeight;
+      if (ch < 160) return _dateToWeekPageIndex(_effectiveSelectedDate);
+    }
+    return _dateToWeekPageIndex(_viewDate);
+  }
 
   int _dateToWeekPageIndex(DateTime date) {
     final sun = date.subtract(Duration(days: date.weekday % 7));
@@ -94,16 +115,8 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
     _viewDate = _weekPageToStartDate(page);
   }
 
-  /// 收起时显示的周：优先级 选中 > 今天 > 当月第一周
-  DateTime _computeViewDateForCollapse() {
-    final selected = _effectiveSelectedDate;
-    final now = DateTime.now();
-    final vy = _viewDate.year;
-    final vm = _viewDate.month;
-    if (selected.year == vy && selected.month == vm) return selected;
-    if (now.year == vy && now.month == vm) return now;
-    return DateTime(vy, vm, 1);
-  }
+  /// 收起时显示的周：始终显示选中日期所在周
+  DateTime _computeViewDateForCollapse() => _effectiveSelectedDate;
 
   @override
   void initState() {
@@ -131,6 +144,63 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
       oldWidget.controller?._detach();
       widget.controller?._attach(this);
     }
+    final newInit = widget.initialDate;
+    if (newInit != null &&
+        (oldWidget.initialDate == null || newInit != oldWidget.initialDate)) {
+      final weekChanged = _dateToWeekPageIndex(_viewDate) != _dateToWeekPageIndex(newInit);
+      final monthChanged = _viewDate.year != newInit.year || _viewDate.month != newInit.month;
+      if (monthChanged || weekChanged) {
+        _viewDate = newInit;
+        if (_pageController.hasClients) {
+          final page = (newInit.year - _baseYear) * 12 + newInit.month - 1;
+          _pageController.jumpToPage(page.clamp(0, _totalMonths - 1));
+        }
+        final targetWeek = _dateToWeekPageIndex(newInit);
+        void jumpWeek() {
+          if (mounted && _weekPageController.hasClients) {
+            _weekPageController.jumpToPage(targetWeek);
+          }
+        }
+        if (_weekPageController.hasClients) {
+          jumpWeek();
+        } else {
+          WidgetsBinding.instance.addPostFrameCallback((_) => jumpWeek());
+        }
+      }
+    }
+    final newCh = widget.constrainedHeight;
+    final oldCh = oldWidget.constrainedHeight;
+    final newCollapsed = newCh != null && (newCh - calendarHeaderHeight) < 160;
+    final oldCollapsed = oldCh != null && (oldCh - calendarHeaderHeight) < 160;
+    if (widget.collapsed == true && oldWidget.collapsed != true ||
+        newCollapsed && !oldCollapsed) {
+      _viewDate = _computeViewDateForCollapse();
+      final targetWeekPage = _dateToWeekPageIndex(_viewDate);
+      void jumpWeek() {
+        if (mounted && _weekPageController.hasClients) {
+          _weekPageController.jumpToPage(targetWeekPage);
+        }
+      }
+      if (_weekPageController.hasClients) {
+        jumpWeek();
+      } else {
+        WidgetsBinding.instance.addPostFrameCallback((_) => jumpWeek());
+      }
+    }
+    if (!newCollapsed && oldCollapsed) {
+      _viewDate = _effectiveSelectedDate;
+      if (_pageController.hasClients) {
+        final page = (_viewDate.year - _baseYear) * 12 + _viewDate.month - 1;
+        _pageController.jumpToPage(page.clamp(0, _totalMonths - 1));
+      } else {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _pageController.hasClients) {
+            final page = (_viewDate.year - _baseYear) * 12 + _viewDate.month - 1;
+            _pageController.jumpToPage(page.clamp(0, _totalMonths - 1));
+          }
+        });
+      }
+    }
   }
 
   void _schedulePrefetch(int pageIndex) {
@@ -157,6 +227,13 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
     super.dispose();
   }
 
+  void _deferViewDateChanged([DateTime? date]) {
+    final d = date ?? _viewDate;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.onViewDateChanged?.call(d);
+    });
+  }
+
   void _onSelectDate(DateTime date) {
     if (widget.onDateSelected != null) {
       widget.onDateSelected!(date);
@@ -164,9 +241,10 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
       setState(() => _selectedDate = date);
     }
     _viewDate = date;
+    _deferViewDateChanged(date);
     final targetMonthPage = (date.year - _baseYear) * 12 + (date.month - 1);
     final page = targetMonthPage.clamp(0, _totalMonths - 1);
-    if (_collapsed) {
+    if (_effectiveCollapsed) {
       if (_weekPageController.hasClients) {
         final weekPage = _dateToWeekPageIndex(date);
         _weekPageController.animateToPage(
@@ -360,11 +438,13 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
 
   void _onPageChanged(int index) {
     _setViewDateFromMonthPage(index);
+    _deferViewDateChanged();
     _schedulePrefetch(index);
   }
 
   void _onWeekPageChanged(int index) {
     _setViewDateFromWeekPage(index);
+    _deferViewDateChanged();
     final weekStart = _weekPageToStartDate(index);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -374,126 +454,239 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final calTheme = CalendarTheme.of(theme.brightness);
+    final calTheme = CalendarTheme.of(Theme.of(context).brightness);
     final maxH = widget.maxHeight ?? _calendarMaxHeight;
+    final useConstraint = widget.constrainedHeight != null;
+    final contentHeight = useConstraint
+        ? (widget.constrainedHeight! - calendarHeaderHeight).clamp(1.0, double.infinity)
+        : (_effectiveCollapsed
+            ? calendarCollapsedHeight - calendarHeaderHeight
+            : (calendarExpandedHeight - calendarHeaderHeight).clamp(0.0, maxH));
 
-    return AnimatedSize(
-      duration: _collapseDuration,
-      curve: Curves.easeInOutCubic,
-      alignment: Alignment.topCenter,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          GestureDetector(
-            onTap: toggleCollapsed,
-            behavior: HitTestBehavior.opaque,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                calendarHorizontalPadding,
-                calendarVerticalPadding,
-                calendarHorizontalPadding,
-                calendarVerticalPadding / 2,
-              ),
-              child: Row(
-                children: [
-                  for (int i = 0; i < _weekdays.length; i++) ...[
-                    if (i > 0) const SizedBox(width: calendarCrossSpacing),
-                    Expanded(
-                      child: Center(
-                        child: Text(
-                          _weekdays[i],
-                          style: TextStyle(
-                            fontSize: weekdayFontSize,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: weekdayLetterSpacing,
-                            color: (i == 0 || i == 6)
-                                ? calTheme.weekdayColorWeekend
-                                : calTheme.weekdayColor,
-                          ),
+    final body = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GestureDetector(
+          onTap: widget.collapsed == null && !useConstraint ? toggleCollapsed : null,
+          behavior: HitTestBehavior.opaque,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              calendarHorizontalPadding,
+              calendarVerticalPadding,
+              calendarHorizontalPadding,
+              calendarVerticalPadding / 2,
+            ),
+            child: Row(
+              children: [
+                for (int i = 0; i < _weekdays.length; i++) ...[
+                  if (i > 0) const SizedBox(width: calendarCrossSpacing),
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        _weekdays[i],
+                        style: TextStyle(
+                          fontSize: weekdayFontSize,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: weekdayLetterSpacing,
+                          color: (i == 0 || i == 6)
+                              ? calTheme.weekdayColorWeekend
+                              : calTheme.weekdayColor,
                         ),
                       ),
                     ),
-                  ],
+                  ),
                 ],
-              ),
+              ],
             ),
           ),
-          ClipRect(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              switchInCurve: Curves.easeOut,
-              switchOutCurve: Curves.easeIn,
-              transitionBuilder: (child, animation) =>
-                  FadeTransition(opacity: animation, child: child),
-              child: SizedBox(
-                key: ValueKey(_collapsed),
-                height: _collapsed
-                    ? calendarCollapsedHeight - calendarHeaderHeight
-                    : calendarExpandedHeight - calendarHeaderHeight,
-                child: LayoutBuilder(
-                  builder: (_, constraints) {
-                    final w = constraints.maxWidth;
-                    final h = _collapsed
-                        ? _collapsedRowHeight
-                        : (calendarExpandedHeight - calendarHeaderHeight).clamp(
-                            0.0,
-                            maxH,
-                          );
-                    if (_collapsed) {
-                      return PageView.builder(
-                        controller: _weekPageController,
-                        itemCount: _totalWeeks,
-                        onPageChanged: _onWeekPageChanged,
-                        physics: const _SensitivePageScrollPhysics(),
-                        itemBuilder: (context, index) {
-                          final weekStart = _weekPageToStartDate(index);
-                          return RepaintBoundary(
-                            child: CalendarWeekRow(
-                              key: ValueKey('w$index'),
-                              weekStart: weekStart,
-                              selectedDate: _effectiveSelectedDate,
-                              onSelectDate: _onSelectDate,
-                              availableHeight: h,
-                              availableWidth: w,
-                              showBadge: _showBadge,
-                            ),
-                          );
-                        },
-                      );
-                    }
+        ),
+        ClipRect(
+          child: AnimatedSwitcher(
+            duration: useConstraint ? Duration.zero : const Duration(milliseconds: 200),
+            switchInCurve: Curves.easeOut,
+            switchOutCurve: Curves.easeIn,
+            transitionBuilder: (child, animation) =>
+                FadeTransition(opacity: animation, child: child),
+            child: SizedBox(
+              key: ValueKey(_effectiveCollapsed),
+              height: contentHeight,
+              child: LayoutBuilder(
+                builder: (_, constraints) {
+                  final w = constraints.maxWidth;
+                  final h = contentHeight;
+                  if (_effectiveCollapsed) {
                     return PageView.builder(
-                      controller: _pageController,
-                      itemCount: _totalMonths,
-                      onPageChanged: _onPageChanged,
+                      controller: _weekPageController,
+                      itemCount: _totalWeeks,
+                      onPageChanged: _onWeekPageChanged,
                       physics: const _SensitivePageScrollPhysics(),
                       itemBuilder: (context, index) {
-                        final (y, m) = _pageToYearMonth(index);
+                        final weekStart = _weekPageToStartDate(index);
                         return RepaintBoundary(
-                          child: CalendarMonthGrid(
-                            key: ValueKey('m$index'),
-                            year: y,
-                            month: m,
+                          child: CalendarWeekRow(
+                            key: ValueKey('w$index'),
+                            weekStart: weekStart,
                             selectedDate: _effectiveSelectedDate,
                             onSelectDate: _onSelectDate,
                             availableHeight: h,
                             availableWidth: w,
-                            dayRows: 6,
-                            showWatermark: true,
                             showBadge: _showBadge,
                           ),
                         );
                       },
                     );
-                  },
-                ),
+                  }
+                  return PageView.builder(
+                    controller: _pageController,
+                    itemCount: _totalMonths,
+                    onPageChanged: _onPageChanged,
+                    physics: const _SensitivePageScrollPhysics(),
+                    itemBuilder: (context, index) {
+                      final (y, m) = _pageToYearMonth(index);
+                      return RepaintBoundary(
+                        child: CalendarMonthGrid(
+                          key: ValueKey('m$index'),
+                          year: y,
+                          month: m,
+                          selectedDate: _effectiveSelectedDate,
+                          onSelectDate: _onSelectDate,
+                          availableHeight: h,
+                          availableWidth: w,
+                          dayRows: 6,
+                          showWatermark: true,
+                          showBadge: _showBadge,
+                        ),
+                      );
+                    },
+                  );
+                },
               ),
             ),
           ),
-        ],
+        ),
+      ],
+    );
+
+    if (useConstraint) {
+      return SizedBox(height: widget.constrainedHeight, child: body);
+    }
+    return AnimatedSize(
+      duration: _collapseDuration,
+      curve: Curves.easeInOutCubic,
+      alignment: Alignment.topCenter,
+      child: body,
+    );
+  }
+}
+
+/// 吸顶日历：滑动时吸顶并自动收起为周视图，底部为 children
+class StickyPerpetualCalendar extends StatefulWidget {
+  final DateTime selectedDate;
+  final ValueChanged<DateTime> onDateSelected;
+  final List<Widget> children;
+
+  const StickyPerpetualCalendar({
+    super.key,
+    required this.selectedDate,
+    required this.onDateSelected,
+    this.children = const [],
+  });
+
+  @override
+  State<StickyPerpetualCalendar> createState() => _StickyPerpetualCalendarState();
+}
+
+class _StickyPerpetualCalendarState extends State<StickyPerpetualCalendar> {
+  final _controller = PerpetualCalendarController();
+  late DateTime _viewDate;
+
+  @override
+  void initState() {
+    super.initState();
+    _viewDate = widget.selectedDate;
+  }
+
+  @override
+  void didUpdateWidget(covariant StickyPerpetualCalendar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.selectedDate != oldWidget.selectedDate) {
+      _viewDate = widget.selectedDate;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomScrollView(
+      cacheExtent: 150,
+      slivers: [
+        SliverPersistentHeader(
+          pinned: true,
+          delegate: _StickyDelegate(
+            selectedDate: widget.selectedDate,
+            viewDate: _viewDate,
+            onDateSelected: widget.onDateSelected,
+            onViewDateChanged: (d) => setState(() => _viewDate = d),
+            controller: _controller,
+          ),
+        ),
+        SliverList(
+          delegate: SliverChildListDelegate(widget.children),
+        ),
+      ],
+    );
+  }
+}
+
+class _StickyDelegate extends SliverPersistentHeaderDelegate {
+  final DateTime selectedDate;
+  final DateTime viewDate;
+  final ValueChanged<DateTime> onDateSelected;
+  final ValueChanged<DateTime> onViewDateChanged;
+  final PerpetualCalendarController controller;
+
+  _StickyDelegate({
+    required this.selectedDate,
+    required this.viewDate,
+    required this.onDateSelected,
+    required this.onViewDateChanged,
+    required this.controller,
+  });
+
+  @override
+  double get minExtent => calendarCollapsedHeight;
+
+  @override
+  double get maxExtent => calendarExpandedHeight;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    final h = (maxExtent - shrinkOffset).clamp(minExtent, maxExtent);
+    // 收起/展开均以 selectedDate 为基准，确保视图与选中日期一致
+    final initial = selectedDate;
+    return Material(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      child: SizedBox(
+        height: h,
+        child: PerpetualCalendar(
+          key: const ValueKey('sticky_cal'),
+          controller: controller,
+          initialDate: initial,
+          selectedDate: selectedDate,
+          onDateSelected: onDateSelected,
+          onViewDateChanged: onViewDateChanged,
+          constrainedHeight: h,
+        ),
       ),
     );
   }
+
+  @override
+  bool shouldRebuild(covariant _StickyDelegate old) =>
+      selectedDate != old.selectedDate || viewDate != old.viewDate;
 }
 
 /// 提高滑动灵敏度：相同手指移动距离产生更大滚动位移
