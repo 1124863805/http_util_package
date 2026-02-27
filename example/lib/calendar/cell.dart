@@ -58,6 +58,7 @@ class CalendarDayCell extends StatelessWidget {
   final bool isOtherMonth;
   final bool isToday;
   final bool isSelected;
+  final bool showBadge;
   final VoidCallback onTap;
 
   const CalendarDayCell({
@@ -73,6 +74,7 @@ class CalendarDayCell extends StatelessWidget {
     required this.isOtherMonth,
     required this.isToday,
     required this.isSelected,
+    this.showBadge = true,
     required this.onTap,
   });
 
@@ -157,7 +159,7 @@ class CalendarDayCell extends StatelessWidget {
               ),
             ),
             child: Stack(
-              clipBehavior: Clip.none,
+              clipBehavior: Clip.hardEdge,
               children: [
                 Center(
                   child: FittedBox(
@@ -185,8 +187,8 @@ class CalendarDayCell extends StatelessWidget {
                     ),
                   ),
                 ),
-                // 休/班/今/周 统一右上角，只显示一个，优先级：今 > 休 > 班 > 周
-                if (isToday)
+                // 休/班/今/周 统一右上角，只显示一个，优先级：今 > 休 > 班 > 周；动画中延迟显示
+                if (showBadge && isToday)
                   Positioned(
                     top: badgeInset,
                     right: badgeInset,
@@ -201,7 +203,7 @@ class CalendarDayCell extends StatelessWidget {
                       ),
                     ),
                   )
-                else if (showRest)
+                else if (showBadge && showRest)
                   Positioned(
                     top: badgeInset,
                     right: badgeInset,
@@ -211,7 +213,7 @@ class CalendarDayCell extends StatelessWidget {
                       textColor: calTheme.badgeTextColor,
                     ),
                   )
-                else if (showWork)
+                else if (showBadge && showWork)
                   Positioned(
                     top: badgeInset,
                     right: badgeInset,
@@ -221,7 +223,7 @@ class CalendarDayCell extends StatelessWidget {
                       textColor: calTheme.badgeTextColor,
                     ),
                   )
-                else if (isWeekend)
+                else if (showBadge && isWeekend)
                   Positioned(
                     top: badgeInset,
                     right: badgeInset,

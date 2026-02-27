@@ -23,6 +23,13 @@ const double badgeInset = 2;
 const double watermarkFontSize = 96;
 const double watermarkOpacity = 0.03;
 
+/// 日历收起/展开时的固定高度，供外部布局使用
+const double calendarExpandedHeight = 400;
+const double calendarHeaderHeight = 30;
+const double calendarRowHeight =
+    (calendarExpandedHeight - calendarHeaderHeight) / 6;
+const double calendarCollapsedHeight = calendarHeaderHeight + calendarRowHeight;
+
 const int subtitleTypeFestival = 0;
 const int subtitleTypeTerm = 1;
 const int subtitleTypeLunar = 2;

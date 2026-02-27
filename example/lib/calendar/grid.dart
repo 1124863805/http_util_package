@@ -84,7 +84,7 @@ void prefetchMonthData(int year, int month) {
   }
 }
 
-/// 单月日历：7 列 × 6 行 42 格，用上月/本月/下月补全
+/// 单月日历：7 列 × N 行，用上月/本月/下月补全
 class CalendarMonthGrid extends StatelessWidget {
   final int year;
   final int month;
@@ -92,6 +92,10 @@ class CalendarMonthGrid extends StatelessWidget {
   final void Function(DateTime date) onSelectDate;
   final double availableHeight;
   final double availableWidth;
+  final int dayRows;
+  final int weekIndex;
+  final bool showWatermark;
+  final bool showBadge;
 
   const CalendarMonthGrid({
     super.key,
@@ -101,10 +105,14 @@ class CalendarMonthGrid extends StatelessWidget {
     required this.onSelectDate,
     required this.availableHeight,
     required this.availableWidth,
+    this.dayRows = 6,
+    this.weekIndex = 0,
+    this.showWatermark = true,
+    this.showBadge = true,
   });
 
   static const int _cols = 7;
-  static const int _dayRows = 6;
+  static const int _fullRows = 6;
 
   @override
   Widget build(BuildContext context) {
@@ -145,6 +153,7 @@ class CalendarMonthGrid extends StatelessWidget {
           isOtherMonth: true,
           isToday: now.year == py && now.month == pm && now.day == d,
           isSelected: isSelected(py, pm, d),
+          showBadge: showBadge,
           onTap: () => onSelectDate(DateTime(py, pm, d)),
         ),
       );
@@ -165,12 +174,13 @@ class CalendarMonthGrid extends StatelessWidget {
           isOtherMonth: false,
           isToday: now.year == year && now.month == month && now.day == d,
           isSelected: isSelected(year, month, d),
+          showBadge: showBadge,
           onTap: () => onSelectDate(DateTime(year, month, d)),
         ),
       );
       cellIndex++;
     }
-    final nextCount = _cols * _dayRows - firstWeekday - dayCount;
+    final nextCount = _cols * _fullRows - firstWeekday - dayCount;
     for (int d = 1; d <= nextCount; d++) {
       final ny = nextMonth.year;
       final nm = nextMonth.month;
@@ -188,6 +198,7 @@ class CalendarMonthGrid extends StatelessWidget {
           isOtherMonth: true,
           isToday: now.year == ny && now.month == nm && now.day == d,
           isSelected: isSelected(ny, nm, d),
+          showBadge: showBadge,
           onTap: () => onSelectDate(DateTime(ny, nm, d)),
         ),
       );
@@ -197,8 +208,14 @@ class CalendarMonthGrid extends StatelessWidget {
     final contentWidth = availableWidth - calendarHorizontalPadding * 2;
     final cellWidth =
         (contentWidth - calendarCrossSpacing * (_cols - 1)) / _cols;
-    final cellHeight = availableHeight / _dayRows;
+    final cellHeight = availableHeight / dayRows;
     final aspectRatio = cellWidth / cellHeight;
+
+    final start = (weekIndex * _cols).clamp(0, cells.length);
+    final end = ((weekIndex + 1) * _cols).clamp(0, cells.length);
+    final displayCells = dayRows == 1
+        ? (start < end ? cells.sublist(start, end) : <Widget>[])
+        : cells;
 
     final watermarkStyle = TextStyle(
       fontSize: watermarkFontSize,
@@ -217,30 +234,30 @@ class CalendarMonthGrid extends StatelessWidget {
         child: Stack(
           clipBehavior: Clip.hardEdge,
           children: [
-            Positioned.fill(
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(height: 40),
-                      Text(
-                        '${month.toString().padLeft(2, '')}月',
-                        style: watermarkStyle,
-                        textAlign: TextAlign.center,
-                      ),
-                      Text(
-                        '$year',
-                        style: watermarkStyle,
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
+            if (showWatermark)
+              Positioned.fill(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '$year年',
+                          style: watermarkStyle,
+                          textAlign: TextAlign.center,
+                        ),
+                        Text(
+                          '${month.toString().padLeft(2, '0')}月',
+                          style: watermarkStyle,
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
             GridView.count(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
@@ -248,7 +265,7 @@ class CalendarMonthGrid extends StatelessWidget {
               mainAxisSpacing: 0,
               crossAxisSpacing: calendarCrossSpacing,
               childAspectRatio: aspectRatio,
-              children: cells,
+              children: displayCells,
             ),
           ],
         ),

@@ -63,6 +63,7 @@ class DemoPage extends StatefulWidget {
 
 class _DemoPageState extends State<DemoPage> {
   String _result = '点击按钮发送 GET 请求';
+  final _calendarController = PerpetualCalendarController();
 
   Future<void> _sendRequest() async {
     final response = await http.send(
@@ -107,7 +108,12 @@ class _DemoPageState extends State<DemoPage> {
             child: const Text('公历/农历/藏历 Demo'),
           ),
           const SizedBox(height: 16),
-          const Expanded(child: PerpetualCalendar()),
+          TextButton.icon(
+            onPressed: () => _calendarController.toggleCollapsed(),
+            icon: const Icon(Icons.unfold_more, size: 18),
+            label: const Text('收起/展开日历'),
+          ),
+          PerpetualCalendar(controller: _calendarController),
           const SizedBox(height: 16),
           SizedBox(
             height: 100,

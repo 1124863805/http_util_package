@@ -1,7 +1,22 @@
 import 'package:flutter/material.dart';
 
+import '../tyme4/tyme.dart';
 import 'constants.dart';
 import 'grid.dart';
+
+/// 控制器：供外部调用 goPrevMonth、goNextMonth、showYearMonthPicker、toggleCollapsed
+class PerpetualCalendarController {
+  PerpetualCalendarState? _state;
+
+  void _attach(PerpetualCalendarState state) => _state = state;
+  void _detach() => _state = null;
+
+  void toggleCollapsed() => _state?.toggleCollapsed();
+  void goPrevMonth() => _state?.goPrevMonth();
+  void goNextMonth() => _state?.goNextMonth();
+  Future<void> showYearMonthPicker() =>
+      _state?.showYearMonthPicker() ?? Future.value();
+}
 
 /// 万年历组件（可嵌入任意页面），范围 1900-2099，左右滑动切月
 class PerpetualCalendar extends StatefulWidget {
@@ -9,6 +24,7 @@ class PerpetualCalendar extends StatefulWidget {
   final DateTime? selectedDate;
   final ValueChanged<DateTime>? onDateSelected;
   final double? maxHeight;
+  final PerpetualCalendarController? controller;
 
   const PerpetualCalendar({
     super.key,
@@ -16,6 +32,7 @@ class PerpetualCalendar extends StatefulWidget {
     this.selectedDate,
     this.onDateSelected,
     this.maxHeight,
+    this.controller,
   });
 
   @override
@@ -23,36 +40,118 @@ class PerpetualCalendar extends StatefulWidget {
 }
 
 /// 供外部通过 GlobalKey 调用：goPrevMonth、goNextMonth、showYearMonthPicker
-class PerpetualCalendarState extends State<PerpetualCalendar> {
+class PerpetualCalendarState extends State<PerpetualCalendar>
+    with SingleTickerProviderStateMixin {
   static const int _baseYear = 1900;
   static const int _endYear = 2099;
   static const int _totalMonths = (_endYear - _baseYear + 1) * 12;
+  static const int _weeksPerMonth = 6;
+  static const int _totalWeeks = _totalMonths * _weeksPerMonth;
   static const List<String> _weekdays = ['日', '一', '二', '三', '四', '五', '六'];
   static const double _calendarMaxHeight = 400;
+  static double get _collapsedRowHeight => calendarRowHeight;
 
   late PageController _pageController;
-  int _currentPage = 0;
+  late PageController _weekPageController;
   late DateTime _selectedDate;
+  late DateTime _viewDate;
+  bool _collapsed = false;
+  late AnimationController _collapseAnimController;
+  late Animation<double> _collapseAnim;
 
-  int get _initialPage {
-    final date = widget.initialDate ?? DateTime.now();
-    final page = (date.year - _baseYear) * 12 + (date.month - 1);
-    return page.clamp(0, _totalMonths - 1);
-  }
+  DateTime get _effectiveSelectedDate => widget.selectedDate ?? _selectedDate;
 
   (int year, int month) _pageToYearMonth(int index) {
     return (_baseYear + index ~/ 12, index % 12 + 1);
   }
 
-  DateTime get _effectiveSelectedDate => widget.selectedDate ?? _selectedDate;
+  (int year, int month, int weekIndex) _weekPageToYearMonthWeek(int index) {
+    final monthIndex = index ~/ _weeksPerMonth;
+    final (y, m) = _pageToYearMonth(monthIndex);
+    return (y, m, index % _weeksPerMonth);
+  }
+
+  int get _monthPage =>
+      ((_viewDate.year - _baseYear) * 12 + _viewDate.month - 1).clamp(
+        0,
+        _totalMonths - 1,
+      );
+
+  int get _weekPage => _dateToWeekPageIndex(_viewDate);
+
+  int _dateToWeekPageIndex(DateTime date) {
+    final solarMonth = SolarMonth.fromYm(date.year, date.month);
+    final firstWeekday = solarMonth.getFirstDay().getWeek().getIndex();
+    final cellIndex = firstWeekday + (date.day - 1);
+    final weekIndex = (cellIndex ~/ 7).clamp(0, _weeksPerMonth - 1);
+    final monthIndex = (date.year - _baseYear) * 12 + (date.month - 1);
+    return (monthIndex.clamp(0, _totalMonths - 1) * _weeksPerMonth + weekIndex)
+        .clamp(0, _totalWeeks - 1);
+  }
+
+  void _setViewDateFromMonthPage(int page) {
+    final (y, m) = _pageToYearMonth(page);
+    _viewDate = DateTime(y, m, 1);
+  }
+
+  void _setViewDateFromWeekPage(int page) {
+    final (y, m, wi) = _weekPageToYearMonthWeek(page);
+    final solarMonth = SolarMonth.fromYm(y, m);
+    final firstWeekday = solarMonth.getFirstDay().getWeek().getIndex();
+    final firstDayOfWeek = wi * 7 - firstWeekday + 1;
+    final day = firstDayOfWeek.clamp(1, solarMonth.getDayCount());
+    _viewDate = DateTime(y, m, day);
+  }
+
+  /// 收起时显示的周：优先级 选中 > 今天 > 当月第一周
+  DateTime _computeViewDateForCollapse() {
+    final selected = _effectiveSelectedDate;
+    final now = DateTime.now();
+    final vy = _viewDate.year;
+    final vm = _viewDate.month;
+    if (selected.year == vy && selected.month == vm) return selected;
+    if (now.year == vy && now.month == vm) return now;
+    return DateTime(vy, vm, 1);
+  }
 
   @override
   void initState() {
     super.initState();
-    _currentPage = _initialPage;
-    _selectedDate = widget.initialDate ?? widget.selectedDate ?? DateTime.now();
-    _pageController = PageController(initialPage: _initialPage);
-    _schedulePrefetch(_initialPage);
+    final init = widget.initialDate ?? widget.selectedDate ?? DateTime.now();
+    _selectedDate = init;
+    _viewDate = init;
+    _pageController = PageController(initialPage: _monthPage);
+    _weekPageController = PageController(initialPage: _weekPage);
+    _collapseAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 320),
+    );
+    _collapseAnim = CurvedAnimation(
+      parent: _collapseAnimController,
+      curve: Curves.easeInOutCubic,
+    );
+    _collapseAnimController.value = 1.0;
+    _collapseAnimController.addStatusListener((_) {
+      if (mounted) setState(() {});
+    });
+    widget.controller?._attach(this);
+    _schedulePrefetch(_monthPage);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_pageController.hasClients) {
+        final page = _pageController.page?.round() ?? _monthPage;
+        _setViewDateFromMonthPage(page.clamp(0, _totalMonths - 1));
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant PerpetualCalendar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller?._detach();
+      widget.controller?._attach(this);
+    }
   }
 
   void _schedulePrefetch(int pageIndex) {
@@ -73,7 +172,10 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
 
   @override
   void dispose() {
+    widget.controller?._detach();
+    _collapseAnimController.dispose();
     _pageController.dispose();
+    _weekPageController.dispose();
     super.dispose();
   }
 
@@ -83,36 +185,96 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
     } else {
       setState(() => _selectedDate = date);
     }
-    final targetPage = (date.year - _baseYear) * 12 + (date.month - 1);
-    final page = targetPage.clamp(0, _totalMonths - 1);
-    if (page == _currentPage || !_pageController.hasClients) return;
-    _pageController.animateToPage(
-      page,
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeInOut,
-    );
+    _viewDate = date;
+    final targetMonthPage = (date.year - _baseYear) * 12 + (date.month - 1);
+    final page = targetMonthPage.clamp(0, _totalMonths - 1);
+    if (_collapsed) {
+      if (_weekPageController.hasClients) {
+        final weekPage = _dateToWeekPageIndex(date);
+        _weekPageController.animateToPage(
+          weekPage,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeInOut,
+        );
+      }
+    } else {
+      final currentPage = _pageController.page?.round();
+      if (_pageController.hasClients &&
+          (currentPage == null || page != currentPage)) {
+        _pageController.animateToPage(
+          page,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeInOut,
+        );
+      }
+    }
+  }
+
+  void toggleCollapsed() {
+    setState(() {
+      if (!_collapsed) {
+        if (_pageController.hasClients) {
+          final page = _pageController.page?.round() ?? _monthPage;
+          _setViewDateFromMonthPage(page.clamp(0, _totalMonths - 1));
+        }
+        _viewDate = _computeViewDateForCollapse();
+      } else {
+        if (_weekPageController.hasClients) {
+          final page = _weekPageController.page?.round() ?? _weekPage;
+          _setViewDateFromWeekPage(page.clamp(0, _totalWeeks - 1));
+        }
+      }
+      _collapsed = !_collapsed;
+      if (_collapsed) {
+        _collapseAnimController.reverse();
+      } else {
+        _collapseAnimController.forward();
+      }
+    });
+    void tryJump([int retry = 0]) {
+      if (!mounted || retry > 5) return;
+      if (_collapsed) {
+        if (_weekPageController.hasClients) {
+          _weekPageController.jumpToPage(_weekPage);
+        } else {
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => tryJump(retry + 1),
+          );
+        }
+      } else {
+        if (_pageController.hasClients) {
+          _pageController.jumpToPage(_monthPage);
+        } else {
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => tryJump(retry + 1),
+          );
+        }
+      }
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => tryJump());
   }
 
   void goPrevMonth() {
-    if (!_pageController.hasClients || _currentPage <= 0) return;
+    if (!_pageController.hasClients || _monthPage <= 0) return;
     _pageController.animateToPage(
-      _currentPage - 1,
+      _monthPage - 1,
       duration: const Duration(milliseconds: 280),
       curve: Curves.easeInOut,
     );
   }
 
   void goNextMonth() {
-    if (!_pageController.hasClients || _currentPage >= _totalMonths - 1) return;
+    if (!_pageController.hasClients || _monthPage >= _totalMonths - 1) return;
     _pageController.animateToPage(
-      _currentPage + 1,
+      _monthPage + 1,
       duration: const Duration(milliseconds: 280),
       curve: Curves.easeInOut,
     );
   }
 
   Future<void> showYearMonthPicker() async {
-    final (year, month) = _pageToYearMonth(_currentPage);
+    final (year, month) = _pageToYearMonth(_monthPage);
     final theme = Theme.of(context);
     final picked = await showDialog<(int year, int month)>(
       context: context,
@@ -196,9 +358,13 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
   }
 
   void _onPageChanged(int index) {
-    _currentPage = index;
+    _setViewDateFromMonthPage(index);
     _schedulePrefetch(index);
-    // 不 setState，_currentPage 仅用于 goPrevMonth/showYearMonthPicker 等，无需重建整树
+  }
+
+  void _onWeekPageChanged(int index) {
+    _setViewDateFromWeekPage(index);
+    _schedulePrefetch(index ~/ _weeksPerMonth);
   }
 
   @override
@@ -207,70 +373,120 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
     final calTheme = CalendarTheme.of(theme.brightness);
     final maxH = widget.maxHeight ?? _calendarMaxHeight;
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            calendarHorizontalPadding,
-            calendarVerticalPadding,
-            calendarHorizontalPadding,
-            calendarVerticalPadding / 2,
-          ),
-          child: Row(
+    final collapsedH = calendarCollapsedHeight;
+    final expandedH = calendarExpandedHeight;
+    return AnimatedBuilder(
+      animation: _collapseAnim,
+      builder: (context, child) {
+        final v = _collapseAnim.value;
+        final h = collapsedH + v * (expandedH - collapsedH);
+        final showBadge = !_collapseAnimController.isAnimating;
+        return SizedBox(
+          height: h,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              for (int i = 0; i < _weekdays.length; i++) ...[
-                if (i > 0) const SizedBox(width: calendarCrossSpacing),
-                Expanded(
-                  child: Center(
-                    child: Text(
-                      _weekdays[i],
-                      style: TextStyle(
-                        fontSize: weekdayFontSize,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: weekdayLetterSpacing,
-                        color: (i == 0 || i == 6)
-                            ? calTheme.weekdayColorWeekend
-                            : calTheme.weekdayColor,
-                      ),
-                    ),
+              GestureDetector(
+                onTap: toggleCollapsed,
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    calendarHorizontalPadding,
+                    calendarVerticalPadding,
+                    calendarHorizontalPadding,
+                    calendarVerticalPadding / 2,
+                  ),
+                  child: Row(
+                    children: [
+                      for (int i = 0; i < _weekdays.length; i++) ...[
+                        if (i > 0) const SizedBox(width: calendarCrossSpacing),
+                        Expanded(
+                          child: Center(
+                            child: Text(
+                              _weekdays[i],
+                              style: TextStyle(
+                                fontSize: weekdayFontSize,
+                                fontWeight: FontWeight.w500,
+                                letterSpacing: weekdayLetterSpacing,
+                                color: (i == 0 || i == 6)
+                                    ? calTheme.weekdayColorWeekend
+                                    : calTheme.weekdayColor,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-              ],
+              ),
+              Expanded(
+                child: ClipRect(
+                  child: LayoutBuilder(
+                  builder: (_, constraints) {
+                    final maxHeight = constraints.maxHeight.isFinite
+                        ? constraints.maxHeight
+                        : maxH;
+                    final rowH = _collapsedRowHeight;
+                    final fullH = maxHeight.clamp(0.0, maxH);
+                    final h = rowH + _collapseAnim.value * (fullH - rowH);
+                    if (_collapsed) {
+                      return PageView.builder(
+                        controller: _weekPageController,
+                        itemCount: _totalWeeks,
+                        onPageChanged: _onWeekPageChanged,
+                        physics: const _SensitivePageScrollPhysics(),
+                        itemBuilder: (context, index) {
+                          final (y, m, wi) = _weekPageToYearMonthWeek(index);
+                          return RepaintBoundary(
+                            child: CalendarMonthGrid(
+                              key: ValueKey('w$index'),
+                              year: y,
+                              month: m,
+                              selectedDate: _effectiveSelectedDate,
+                              onSelectDate: _onSelectDate,
+                              availableHeight: h,
+                              availableWidth: constraints.maxWidth,
+                            dayRows: 1,
+                            weekIndex: wi,
+                            showWatermark: false,
+                            showBadge: showBadge,
+                          ),
+                          );
+                        },
+                      );
+                    }
+                    return PageView.builder(
+                      controller: _pageController,
+                      itemCount: _totalMonths,
+                      onPageChanged: _onPageChanged,
+                      physics: const _SensitivePageScrollPhysics(),
+                      itemBuilder: (context, index) {
+                        final (y, m) = _pageToYearMonth(index);
+                        return RepaintBoundary(
+                          child: CalendarMonthGrid(
+                            key: ValueKey('m$index'),
+                            year: y,
+                            month: m,
+                            selectedDate: _effectiveSelectedDate,
+                            onSelectDate: _onSelectDate,
+                            availableHeight: h,
+                            availableWidth: constraints.maxWidth,
+                            dayRows: 6,
+                            showWatermark: true,
+                            showBadge: showBadge,
+                          ),
+                        );
+                    },
+                  );
+                },
+              ),
+            ),
+            ),
             ],
           ),
-        ),
-        Expanded(
-          child: LayoutBuilder(
-            builder: (_, constraints) {
-              final h = constraints.maxHeight.clamp(0.0, maxH);
-              return SizedBox(
-                height: h,
-                child: PageView.builder(
-                  controller: _pageController,
-                  itemCount: _totalMonths,
-                  onPageChanged: _onPageChanged,
-                  physics: const _SensitivePageScrollPhysics(),
-                  itemBuilder: (context, index) {
-                    final (y, m) = _pageToYearMonth(index);
-                    return RepaintBoundary(
-                      child: CalendarMonthGrid(
-                        key: ValueKey(index),
-                        year: y,
-                        month: m,
-                        selectedDate: _effectiveSelectedDate,
-                        onSelectDate: _onSelectDate,
-                        availableHeight: h,
-                        availableWidth: constraints.maxWidth,
-                      ),
-                    );
-                  },
-                ),
-              );
-            },
-          ),
-        ),
-      ],
+        );
+      },
     );
   }
 }
