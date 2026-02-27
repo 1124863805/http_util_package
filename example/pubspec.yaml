@@ -56,14 +56,6 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  assets:
-    - assets/fonts/
-
-  fonts:
-    - family: LXGW WenKai
-      fonts:
-        - asset: assets/fonts/LXGWWenKai-Regular.ttf
-
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
 

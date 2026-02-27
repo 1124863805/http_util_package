@@ -7,8 +7,14 @@ import 'constants.dart';
 class RestWorkBadge extends StatelessWidget {
   final String label;
   final Color backgroundColor;
+  final Color textColor;
 
-  const RestWorkBadge({super.key, required this.label, required this.backgroundColor});
+  const RestWorkBadge({
+    super.key,
+    required this.label,
+    required this.backgroundColor,
+    this.textColor = Colors.white,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -16,14 +22,23 @@ class RestWorkBadge extends StatelessWidget {
       width: badgeSize,
       height: badgeSize,
       alignment: Alignment.center,
-      decoration: BoxDecoration(color: backgroundColor, shape: BoxShape.circle),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: backgroundColor.withValues(alpha: 0.4),
+            blurRadius: 2,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
       child: Text(
         label,
         style: TextStyle(
           fontSize: badgeFontSize,
           fontWeight: FontWeight.w700,
-          color: Colors.white,
-          fontFamily: calendarFontFamily,
+          color: textColor,
         ),
       ),
     );
@@ -64,45 +79,50 @@ class CalendarDayCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final calTheme = CalendarTheme.of(theme.brightness);
     final bool todaySelected = isToday && isSelected;
-    final Color todayBg = colorScheme.errorContainer;
-    final Color onTodayBg = colorScheme.onErrorContainer;
     final Color dayColor = todaySelected
-        ? onTodayBg
+        ? calTheme.cellBorderSelected
         : isOtherMonth
-            ? colorScheme.onSurface.withValues(alpha: 0.38)
-            : isToday
-                ? colorScheme.onSurface.withValues(alpha: 0.8)
-                : isWeekend
-                    ? colorScheme.error
-                    : colorScheme.onSurface.withValues(alpha: 0.85);
+        ? calTheme.dayNumberColorOtherMonth
+        : isToday
+        ? calTheme.dayNumberColorToday
+        : isWeekend
+        ? calTheme.dayNumberColorWeekend
+        : calTheme.dayNumberColor;
     final dayStyle = TextStyle(
       fontSize: dayNumberFontSize,
       fontWeight: todaySelected ? FontWeight.w800 : FontWeight.w700,
       color: dayColor,
-      fontFamily: calendarFontFamily,
     );
 
     double subtitleSize = subtitleFontSizeLunar;
     FontWeight subtitleWeight = FontWeight.w500;
-    Color subtitleColor = colorScheme.onSurface.withValues(alpha: isOtherMonth ? 0.4 : 0.65);
+    Color subtitleColor;
     if (subtitleType == subtitleTypeFestival) {
       subtitleSize = subtitleFontSizeFestival;
       subtitleWeight = todaySelected ? FontWeight.w800 : FontWeight.w700;
       subtitleColor = todaySelected
-          ? onTodayBg
-          : (!isOtherMonth && !todaySelected ? colorScheme.error : colorScheme.onSurface.withValues(alpha: 0.45));
+          ? calTheme.cellBorderSelected
+          : (isOtherMonth
+                ? calTheme.subtitleColorOtherMonth
+                : calTheme.subtitleColorFestival);
     } else if (subtitleType == subtitleTypeTerm) {
       subtitleSize = subtitleFontSizeTerm;
       subtitleWeight = todaySelected ? FontWeight.w800 : FontWeight.w600;
       subtitleColor = todaySelected
-          ? onTodayBg
-          : (!isOtherMonth ? const Color(0xFF2E7D32) : colorScheme.onSurface.withValues(alpha: 0.42));
+          ? calTheme.cellBorderSelected
+          : (isOtherMonth
+                ? calTheme.subtitleColorOtherMonth
+                : calTheme.subtitleColorTerm);
     } else {
       subtitleSize = subtitleFontSizeLunar;
       subtitleWeight = todaySelected ? FontWeight.w800 : FontWeight.w500;
-      subtitleColor = todaySelected ? onTodayBg : colorScheme.onSurface.withValues(alpha: 0.65);
+      subtitleColor = todaySelected
+          ? calTheme.cellBorderSelected
+          : (isOtherMonth
+                ? calTheme.subtitleColorOtherMonth
+                : calTheme.subtitleColor);
     }
 
     final radius = BorderRadius.all(Radius.circular(cellBorderRadius));
@@ -121,11 +141,18 @@ class CalendarDayCell extends StatelessWidget {
           child: Container(
             decoration: BoxDecoration(
               borderRadius: radius,
+              // 休/今/选中背景：休用低透明度(0.5)不遮挡水印；今和选中用 0.85
               color: todaySelected
-                  ? todayBg
-                  : (isToday ? colorScheme.surfaceContainerHighest : null),
+                  ? calTheme.cellBgSelected.withValues(alpha: 0.85)
+                  : (isToday
+                        ? calTheme.cellBgToday.withValues(alpha: 0.85)
+                        : (showRest
+                              ? calTheme.cellBgRest.withValues(alpha: 0.5)
+                              : null)),
               border: Border.all(
-                color: isSelected ? colorScheme.error : Colors.transparent,
+                color: isSelected
+                    ? calTheme.cellBorderSelected
+                    : Colors.transparent,
                 width: cellBorderWidth,
               ),
             ),
@@ -146,8 +173,9 @@ class CalendarDayCell extends StatelessWidget {
                             style: TextStyle(
                               fontSize: subtitleSize,
                               fontWeight: subtitleWeight,
-                              color: todaySelected ? onTodayBg : subtitleColor,
-                              fontFamily: calendarFontFamily,
+                              color: todaySelected
+                                  ? calTheme.cellBorderSelected
+                                  : subtitleColor,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -157,32 +185,50 @@ class CalendarDayCell extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (showRest)
-                  Positioned(
-                    top: badgeInset,
-                    left: badgeInset,
-                    child: RestWorkBadge(label: '休', backgroundColor: colorScheme.error),
-                  ),
-                if (showWork)
-                  Positioned(
-                    top: badgeInset,
-                    right: badgeInset,
-                    child: RestWorkBadge(label: '班', backgroundColor: colorScheme.primary),
-                  ),
+                // 休/班/今/周 统一右上角，只显示一个，优先级：今 > 休 > 班 > 周
                 if (isToday)
                   Positioned(
                     top: badgeInset,
-                    right: showWork ? badgeSize + badgeInset : badgeInset,
+                    right: badgeInset,
                     child: Text(
                       '今',
                       style: TextStyle(
                         fontSize: todayLabelFontSize,
                         fontWeight: FontWeight.w700,
                         color: todaySelected
-                            ? onTodayBg
-                            : colorScheme.onSurface.withValues(alpha: 0.7),
-                        fontFamily: calendarFontFamily,
+                            ? calTheme.cellBorderSelected
+                            : calTheme.dayNumberColorToday,
                       ),
+                    ),
+                  )
+                else if (showRest)
+                  Positioned(
+                    top: badgeInset,
+                    right: badgeInset,
+                    child: RestWorkBadge(
+                      label: '休',
+                      backgroundColor: calTheme.badgeRestBg,
+                      textColor: calTheme.badgeTextColor,
+                    ),
+                  )
+                else if (showWork)
+                  Positioned(
+                    top: badgeInset,
+                    right: badgeInset,
+                    child: RestWorkBadge(
+                      label: '班',
+                      backgroundColor: calTheme.badgeWorkBg,
+                      textColor: calTheme.badgeTextColor,
+                    ),
+                  )
+                else if (isWeekend)
+                  Positioned(
+                    top: badgeInset,
+                    right: badgeInset,
+                    child: RestWorkBadge(
+                      label: '周',
+                      backgroundColor: calTheme.badgeWeekendBg,
+                      textColor: calTheme.badgeTextColor,
                     ),
                   ),
               ],
@@ -200,6 +246,7 @@ class CalendarDayCell extends StatelessWidget {
     if (subtitle.isNotEmpty) parts.add(subtitle);
     if (showRest) parts.add('休');
     if (showWork) parts.add('班');
+    if (isWeekend && !showRest && !showWork) parts.add('周末');
     if (isSelected && !isToday) parts.add('已选中');
     return parts.join(' ');
   }

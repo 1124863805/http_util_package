@@ -52,6 +52,23 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
     _currentPage = _initialPage;
     _selectedDate = widget.initialDate ?? widget.selectedDate ?? DateTime.now();
     _pageController = PageController(initialPage: _initialPage);
+    _schedulePrefetch(_initialPage);
+  }
+
+  void _schedulePrefetch(int pageIndex) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final (y, m) = _pageToYearMonth(pageIndex);
+      prefetchMonthData(y, m);
+      if (pageIndex > 0) {
+        final (py, pm) = _pageToYearMonth(pageIndex - 1);
+        prefetchMonthData(py, pm);
+      }
+      if (pageIndex < _totalMonths - 1) {
+        final (ny, nm) = _pageToYearMonth(pageIndex + 1);
+        prefetchMonthData(ny, nm);
+      }
+    });
   }
 
   @override
@@ -105,12 +122,7 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: Text(
-                '选择年月',
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontFamily: calendarFontFamily,
-                ),
-              ),
+              title: Text('选择年月', style: theme.textTheme.titleLarge),
               content: SizedBox(
                 width: 220,
                 child: Column(
@@ -118,22 +130,20 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
                   children: [
                     DropdownButtonFormField<int>(
                       initialValue: selYear,
-                      decoration: InputDecoration(
-                        labelText: '年',
-                        labelStyle: TextStyle(fontFamily: calendarFontFamily),
-                      ),
+                      decoration: InputDecoration(labelText: '年'),
                       dropdownColor: theme.colorScheme.surface,
-                      items: List.generate(
-                        _endYear - _baseYear + 1,
-                        (i) => _baseYear + i,
-                      )
-                          .map(
-                            (y) => DropdownMenuItem(
-                              value: y,
-                              child: Text('$y年', style: TextStyle(fontFamily: calendarFontFamily)),
-                            ),
-                          )
-                          .toList(),
+                      items:
+                          List.generate(
+                                _endYear - _baseYear + 1,
+                                (i) => _baseYear + i,
+                              )
+                              .map(
+                                (y) => DropdownMenuItem(
+                                  value: y,
+                                  child: Text('$y年'),
+                                ),
+                              )
+                              .toList(),
                       onChanged: (v) {
                         if (v != null) setDialogState(() => selYear = v);
                       },
@@ -141,17 +151,12 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
                     SizedBox(height: calendarVerticalPadding * 2),
                     DropdownButtonFormField<int>(
                       value: selMonth,
-                      decoration: InputDecoration(
-                        labelText: '月',
-                        labelStyle: TextStyle(fontFamily: calendarFontFamily),
-                      ),
+                      decoration: InputDecoration(labelText: '月'),
                       dropdownColor: theme.colorScheme.surface,
                       items: List.generate(12, (i) => i + 1)
                           .map(
-                            (m) => DropdownMenuItem(
-                              value: m,
-                              child: Text('$m月', style: TextStyle(fontFamily: calendarFontFamily)),
-                            ),
+                            (m) =>
+                                DropdownMenuItem(value: m, child: Text('$m月')),
                           )
                           .toList(),
                       onChanged: (v) {
@@ -164,11 +169,12 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: Text('取消', style: TextStyle(fontFamily: calendarFontFamily)),
+                  child: const Text('取消'),
                 ),
                 FilledButton(
-                  onPressed: () => Navigator.of(context).pop((selYear, selMonth)),
-                  child: Text('确定', style: TextStyle(fontFamily: calendarFontFamily)),
+                  onPressed: () =>
+                      Navigator.of(context).pop((selYear, selMonth)),
+                  child: const Text('确定'),
                 ),
               ],
             );
@@ -177,7 +183,10 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
       },
     );
     if (picked != null && mounted && _pageController.hasClients) {
-      final page = ((picked.$1 - _baseYear) * 12 + (picked.$2 - 1)).clamp(0, _totalMonths - 1);
+      final page = ((picked.$1 - _baseYear) * 12 + (picked.$2 - 1)).clamp(
+        0,
+        _totalMonths - 1,
+      );
       _pageController.animateToPage(
         page,
         duration: const Duration(milliseconds: 280),
@@ -187,12 +196,15 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
   }
 
   void _onPageChanged(int index) {
-    setState(() => _currentPage = index);
+    _currentPage = index;
+    _schedulePrefetch(index);
+    // 不 setState，_currentPage 仅用于 goPrevMonth/showYearMonthPicker 等，无需重建整树
   }
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final calTheme = CalendarTheme.of(theme.brightness);
     final maxH = widget.maxHeight ?? _calendarMaxHeight;
 
     return Column(
@@ -216,10 +228,9 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
                       style: TextStyle(
                         fontSize: weekdayFontSize,
                         fontWeight: FontWeight.w500,
-                        fontFamily: calendarFontFamily,
                         color: (i == 0 || i == 6)
-                            ? colorScheme.error
-                            : colorScheme.onSurface.withValues(alpha: 0.55),
+                            ? calTheme.weekdayColorWeekend
+                            : calTheme.weekdayColor,
                       ),
                     ),
                   ),
@@ -238,15 +249,19 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
                   controller: _pageController,
                   itemCount: _totalMonths,
                   onPageChanged: _onPageChanged,
+                  physics: const _SensitivePageScrollPhysics(),
                   itemBuilder: (context, index) {
                     final (y, m) = _pageToYearMonth(index);
-                    return CalendarMonthGrid(
-                      year: y,
-                      month: m,
-                      selectedDate: _effectiveSelectedDate,
-                      onSelectDate: _onSelectDate,
-                      availableHeight: h,
-                      availableWidth: constraints.maxWidth,
+                    return RepaintBoundary(
+                      child: CalendarMonthGrid(
+                        key: ValueKey(index),
+                        year: y,
+                        month: m,
+                        selectedDate: _effectiveSelectedDate,
+                        onSelectDate: _onSelectDate,
+                        availableHeight: h,
+                        availableWidth: constraints.maxWidth,
+                      ),
                     );
                   },
                 ),
@@ -256,5 +271,22 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
         ),
       ],
     );
+  }
+}
+
+/// 提高滑动灵敏度：相同手指移动距离产生更大滚动位移
+class _SensitivePageScrollPhysics extends PageScrollPhysics {
+  const _SensitivePageScrollPhysics({super.parent});
+
+  static const double _sensitivity = 2.25;
+
+  @override
+  _SensitivePageScrollPhysics applyTo(ScrollPhysics? ancestor) {
+    return _SensitivePageScrollPhysics(parent: buildParent(ancestor));
+  }
+
+  @override
+  double applyPhysicsToUserOffset(ScrollMetrics position, double offset) {
+    return offset * _sensitivity;
   }
 }
