@@ -13,6 +13,7 @@ class PerpetualCalendarController {
   void toggleCollapsed() => _state?.toggleCollapsed();
   void goPrevMonth() => _state?.goPrevMonth();
   void goNextMonth() => _state?.goNextMonth();
+  void goToDate(DateTime date) => _state?.goToDate(date);
   Future<void> showYearMonthPicker() =>
       _state?.showYearMonthPicker() ?? Future.value();
 }
@@ -242,6 +243,17 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) => tryJump());
+  }
+
+  void goToDate(DateTime date) {
+    _viewDate = date;
+    if (_pageController.hasClients) {
+      final page = (date.year - _baseYear) * 12 + date.month - 1;
+      _pageController.jumpToPage(page.clamp(0, _totalMonths - 1));
+    }
+    if (_weekPageController.hasClients) {
+      _weekPageController.jumpToPage(_dateToWeekPageIndex(date));
+    }
   }
 
   void goPrevMonth() {

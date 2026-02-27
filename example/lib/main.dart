@@ -64,6 +64,18 @@ class DemoPage extends StatefulWidget {
 class _DemoPageState extends State<DemoPage> {
   String _result = '点击按钮发送 GET 请求';
   final _calendarController = PerpetualCalendarController();
+  late DateTime _selectedDate;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedDate = DateTime.now();
+  }
+
+  void _onDateChanged(DateTime date) {
+    setState(() => _selectedDate = date);
+    _calendarController.goToDate(date);
+  }
 
   Future<void> _sendRequest() async {
     final response = await http.send(
@@ -108,12 +120,20 @@ class _DemoPageState extends State<DemoPage> {
             child: const Text('公历/农历/藏历 Demo'),
           ),
           const SizedBox(height: 16),
+          _DateSelector(
+            date: _selectedDate,
+            onChanged: _onDateChanged,
+          ),
           TextButton.icon(
             onPressed: () => _calendarController.toggleCollapsed(),
             icon: const Icon(Icons.unfold_more, size: 18),
             label: const Text('收起/展开日历'),
           ),
-          PerpetualCalendar(controller: _calendarController),
+          PerpetualCalendar(
+            controller: _calendarController,
+            selectedDate: _selectedDate,
+            onDateSelected: _onDateChanged,
+          ),
           const SizedBox(height: 16),
           SizedBox(
             height: 100,
@@ -125,6 +145,105 @@ class _DemoPageState extends State<DemoPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _DateSelector extends StatelessWidget {
+  final DateTime date;
+  final ValueChanged<DateTime> onChanged;
+
+  const _DateSelector({
+    required this.date,
+    required this.onChanged,
+  });
+
+  static const int _baseYear = 1900;
+  static const int _endYear = 2099;
+
+  int _dayCount(int year, int month) =>
+      DateTime(year, month + 1, 0).day;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          Text('快速切换：', style: theme.textTheme.bodyMedium),
+          const SizedBox(width: 8),
+          _Dropdown<int>(
+            value: date.year,
+            items: List.generate(
+              _endYear - _baseYear + 1,
+              (i) => DropdownMenuItem(value: _baseYear + i, child: Text('${_baseYear + i}年')),
+            ),
+            onChanged: (v) {
+              if (v != null) {
+                final d = date.day.clamp(1, _dayCount(v, date.month));
+                onChanged(DateTime(v, date.month, d));
+              }
+            },
+          ),
+          const SizedBox(width: 8),
+          _Dropdown<int>(
+            value: date.month,
+            items: List.generate(
+              12,
+              (i) => DropdownMenuItem(value: i + 1, child: Text('${i + 1}月')),
+            ),
+            onChanged: (v) {
+              if (v != null) {
+                final d = date.day.clamp(1, _dayCount(date.year, v));
+                onChanged(DateTime(date.year, v, d));
+              }
+            },
+          ),
+          const SizedBox(width: 8),
+          _Dropdown<int>(
+            value: date.day,
+            items: List.generate(
+              _dayCount(date.year, date.month),
+              (i) => DropdownMenuItem(value: i + 1, child: Text('${i + 1}日')),
+            ),
+            onChanged: (v) {
+              if (v != null) onChanged(DateTime(date.year, date.month, v));
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Dropdown<T> extends StatelessWidget {
+  final T value;
+  final List<DropdownMenuItem<T>> items;
+  final ValueChanged<T?> onChanged;
+
+  const _Dropdown({
+    required this.value,
+    required this.items,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        border: Border.all(color: Theme.of(context).colorScheme.outline),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: value,
+          items: items,
+          onChanged: onChanged,
+          isDense: true,
+        ),
       ),
     );
   }
