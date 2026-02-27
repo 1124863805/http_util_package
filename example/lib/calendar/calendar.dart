@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../tyme4/tyme.dart';
 import 'constants.dart';
 import 'grid.dart';
 
@@ -43,9 +42,11 @@ class PerpetualCalendar extends StatefulWidget {
 class PerpetualCalendarState extends State<PerpetualCalendar> {
   static const int _baseYear = 1900;
   static const int _endYear = 2099;
+  static final DateTime _weekEpoch = DateTime(1899, 12, 31);
   static const int _totalMonths = (_endYear - _baseYear + 1) * 12;
-  static const int _weeksPerMonth = 6;
-  static const int _totalWeeks = _totalMonths * _weeksPerMonth;
+  static final int _totalWeeks = DateTime(_endYear, 12, 31)
+      .difference(_weekEpoch)
+      .inDays ~/ 7;
   static const List<String> _weekdays = ['日', '一', '二', '三', '四', '五', '六'];
   static const double _calendarMaxHeight = 400;
   static double get _collapsedRowHeight => calendarRowHeight;
@@ -63,10 +64,8 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
     return (_baseYear + index ~/ 12, index % 12 + 1);
   }
 
-  (int year, int month, int weekIndex) _weekPageToYearMonthWeek(int index) {
-    final monthIndex = index ~/ _weeksPerMonth;
-    final (y, m) = _pageToYearMonth(monthIndex);
-    return (y, m, index % _weeksPerMonth);
+  DateTime _weekPageToStartDate(int index) {
+    return _weekEpoch.add(Duration(days: index * 7));
   }
 
   int get _monthPage =>
@@ -78,13 +77,10 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
   int get _weekPage => _dateToWeekPageIndex(_viewDate);
 
   int _dateToWeekPageIndex(DateTime date) {
-    final solarMonth = SolarMonth.fromYm(date.year, date.month);
-    final firstWeekday = solarMonth.getFirstDay().getWeek().getIndex();
-    final cellIndex = firstWeekday + (date.day - 1);
-    final weekIndex = (cellIndex ~/ 7).clamp(0, _weeksPerMonth - 1);
-    final monthIndex = (date.year - _baseYear) * 12 + (date.month - 1);
-    return (monthIndex.clamp(0, _totalMonths - 1) * _weeksPerMonth + weekIndex)
-        .clamp(0, _totalWeeks - 1);
+    final sun = date.subtract(Duration(days: date.weekday % 7));
+    final days = sun.difference(_weekEpoch).inDays;
+    final idx = days ~/ 7;
+    return idx.clamp(0, _totalWeeks - 1);
   }
 
   void _setViewDateFromMonthPage(int page) {
@@ -93,12 +89,7 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
   }
 
   void _setViewDateFromWeekPage(int page) {
-    final (y, m, wi) = _weekPageToYearMonthWeek(page);
-    final solarMonth = SolarMonth.fromYm(y, m);
-    final firstWeekday = solarMonth.getFirstDay().getWeek().getIndex();
-    final firstDayOfWeek = wi * 7 - firstWeekday + 1;
-    final day = firstDayOfWeek.clamp(1, solarMonth.getDayCount());
-    _viewDate = DateTime(y, m, day);
+    _viewDate = _weekPageToStartDate(page);
   }
 
   /// 收起时显示的周：优先级 选中 > 今天 > 当月第一周
@@ -209,6 +200,11 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
         if (_weekPageController.hasClients) {
           final page = _weekPageController.page?.round() ?? _weekPage;
           _setViewDateFromWeekPage(page.clamp(0, _totalWeeks - 1));
+          final selected = _effectiveSelectedDate;
+          if (selected.year != _viewDate.year ||
+              selected.month != _viewDate.month) {
+            _viewDate = selected;
+          }
         }
       }
       _collapsed = !_collapsed;
@@ -222,6 +218,7 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
       if (_collapsed) {
         if (_weekPageController.hasClients) {
           _weekPageController.jumpToPage(_weekPage);
+          prefetchWeekData(_weekPageToStartDate(_weekPage));
         } else {
           WidgetsBinding.instance.addPostFrameCallback(
             (_) => tryJump(retry + 1),
@@ -350,7 +347,11 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
 
   void _onWeekPageChanged(int index) {
     _setViewDateFromWeekPage(index);
-    _schedulePrefetch(index ~/ _weeksPerMonth);
+    final weekStart = _weekPageToStartDate(index);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      prefetchWeekData(weekStart);
+    });
   }
 
   @override
@@ -428,19 +429,15 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
                         onPageChanged: _onWeekPageChanged,
                         physics: const _SensitivePageScrollPhysics(),
                         itemBuilder: (context, index) {
-                          final (y, m, wi) = _weekPageToYearMonthWeek(index);
+                          final weekStart = _weekPageToStartDate(index);
                           return RepaintBoundary(
-                            child: CalendarMonthGrid(
+                            child: CalendarWeekRow(
                               key: ValueKey('w$index'),
-                              year: y,
-                              month: m,
+                              weekStart: weekStart,
                               selectedDate: _effectiveSelectedDate,
                               onSelectDate: _onSelectDate,
                               availableHeight: h,
                               availableWidth: w,
-                              dayRows: 1,
-                              weekIndex: wi,
-                              showWatermark: false,
                               showBadge: _showBadge,
                             ),
                           );

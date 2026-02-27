@@ -63,6 +63,93 @@ getSubtitleAndRest(SolarDay solarDay) {
   return result;
 }
 
+/// 单周行：7 列，按周日为起点，无跨月重复
+class CalendarWeekRow extends StatelessWidget {
+  final DateTime weekStart;
+  final DateTime selectedDate;
+  final void Function(DateTime date) onSelectDate;
+  final double availableHeight;
+  final double availableWidth;
+  final bool showBadge;
+
+  const CalendarWeekRow({
+    super.key,
+    required this.weekStart,
+    required this.selectedDate,
+    required this.onSelectDate,
+    required this.availableHeight,
+    required this.availableWidth,
+    this.showBadge = true,
+  });
+
+  static const int _cols = 7;
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    (String, bool, bool, int) getCached(int y, int m, int d) =>
+        getSubtitleAndRest(SolarDay.fromYmd(y, m, d));
+    bool isSelected(int y, int m, int d) =>
+        selectedDate.year == y &&
+        selectedDate.month == m &&
+        selectedDate.day == d;
+
+    final cells = <Widget>[];
+    for (int i = 0; i < _cols; i++) {
+      final d = weekStart.add(Duration(days: i));
+      final (subtitle, showRest, showWork, st) =
+          getCached(d.year, d.month, d.day);
+      final isOtherMonth = d.month != weekStart.month || d.year != weekStart.year;
+      cells.add(
+        CalendarDayCell(
+          year: d.year,
+          month: d.month,
+          day: d.day,
+          subtitle: subtitle,
+          subtitleType: st,
+          showRest: showRest,
+          showWork: showWork,
+          isWeekend: i == 0 || i == 6,
+          isOtherMonth: isOtherMonth,
+          isToday: now.year == d.year && now.month == d.month && now.day == d.day,
+          isSelected: isSelected(d.year, d.month, d.day),
+          showBadge: showBadge,
+          onTap: () => onSelectDate(d),
+        ),
+      );
+    }
+
+    final contentWidth = availableWidth - calendarHorizontalPadding * 2;
+    final cellWidth =
+        (contentWidth - calendarCrossSpacing * (_cols - 1)) / _cols;
+    final aspectRatio = cellWidth / availableHeight;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: calendarHorizontalPadding),
+      child: SizedBox(
+        height: availableHeight,
+        child: GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: _cols,
+          mainAxisSpacing: 0,
+          crossAxisSpacing: calendarCrossSpacing,
+          childAspectRatio: aspectRatio,
+          children: cells,
+        ),
+      ),
+    );
+  }
+}
+
+/// 预取某周 7 天的数据
+void prefetchWeekData(DateTime weekStart) {
+  for (int i = 0; i < 7; i++) {
+    final d = weekStart.add(Duration(days: i));
+    getSubtitleAndRest(SolarDay.fromYmd(d.year, d.month, d.day));
+  }
+}
+
 /// 预取某月及其相邻月的数据，滑动时命中缓存
 void prefetchMonthData(int year, int month) {
   final solarMonth = SolarMonth.fromYm(year, month);
