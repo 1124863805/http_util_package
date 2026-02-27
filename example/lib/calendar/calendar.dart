@@ -57,6 +57,7 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
   late DateTime _viewDate;
   bool _collapsed = false;
   bool _showBadge = true;
+  bool _isToggling = false;
 
   DateTime get _effectiveSelectedDate => widget.selectedDate ?? _selectedDate;
 
@@ -189,6 +190,11 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
   static const _collapseDuration = Duration(milliseconds: 380);
 
   void toggleCollapsed() {
+    if (_isToggling) return;
+    _isToggling = true;
+    Future.delayed(_collapseDuration, () {
+      if (mounted) setState(() => _isToggling = false);
+    });
     setState(() {
       if (!_collapsed) {
         if (_pageController.hasClients) {
