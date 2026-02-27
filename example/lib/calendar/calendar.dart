@@ -405,10 +405,8 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
               duration: const Duration(milliseconds: 200),
               switchInCurve: Curves.easeOut,
               switchOutCurve: Curves.easeIn,
-              transitionBuilder: (child, animation) => FadeTransition(
-                opacity: animation,
-                child: child,
-              ),
+              transitionBuilder: (child, animation) =>
+                  FadeTransition(opacity: animation, child: child),
               child: SizedBox(
                 key: ValueKey(_collapsed),
                 height: _collapsed
@@ -419,8 +417,10 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
                     final w = constraints.maxWidth;
                     final h = _collapsed
                         ? _collapsedRowHeight
-                        : (calendarExpandedHeight - calendarHeaderHeight)
-                            .clamp(0.0, maxH);
+                        : (calendarExpandedHeight - calendarHeaderHeight).clamp(
+                            0.0,
+                            maxH,
+                          );
                     if (_collapsed) {
                       return PageView.builder(
                         controller: _weekPageController,
