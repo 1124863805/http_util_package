@@ -40,8 +40,7 @@ class PerpetualCalendar extends StatefulWidget {
 }
 
 /// 供外部通过 GlobalKey 调用：goPrevMonth、goNextMonth、showYearMonthPicker
-class PerpetualCalendarState extends State<PerpetualCalendar>
-    with SingleTickerProviderStateMixin {
+class PerpetualCalendarState extends State<PerpetualCalendar> {
   static const int _baseYear = 1900;
   static const int _endYear = 2099;
   static const int _totalMonths = (_endYear - _baseYear + 1) * 12;
@@ -56,8 +55,7 @@ class PerpetualCalendarState extends State<PerpetualCalendar>
   late DateTime _selectedDate;
   late DateTime _viewDate;
   bool _collapsed = false;
-  late AnimationController _collapseAnimController;
-  late Animation<double> _collapseAnim;
+  bool _showBadge = true;
 
   DateTime get _effectiveSelectedDate => widget.selectedDate ?? _selectedDate;
 
@@ -122,18 +120,6 @@ class PerpetualCalendarState extends State<PerpetualCalendar>
     _viewDate = init;
     _pageController = PageController(initialPage: _monthPage);
     _weekPageController = PageController(initialPage: _weekPage);
-    _collapseAnimController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 320),
-    );
-    _collapseAnim = CurvedAnimation(
-      parent: _collapseAnimController,
-      curve: Curves.easeInOutCubic,
-    );
-    _collapseAnimController.value = 1.0;
-    _collapseAnimController.addStatusListener((_) {
-      if (mounted) setState(() {});
-    });
     widget.controller?._attach(this);
     _schedulePrefetch(_monthPage);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -173,7 +159,6 @@ class PerpetualCalendarState extends State<PerpetualCalendar>
   @override
   void dispose() {
     widget.controller?._detach();
-    _collapseAnimController.dispose();
     _pageController.dispose();
     _weekPageController.dispose();
     super.dispose();
@@ -210,6 +195,8 @@ class PerpetualCalendarState extends State<PerpetualCalendar>
     }
   }
 
+  static const _collapseDuration = Duration(milliseconds: 380);
+
   void toggleCollapsed() {
     setState(() {
       if (!_collapsed) {
@@ -225,11 +212,10 @@ class PerpetualCalendarState extends State<PerpetualCalendar>
         }
       }
       _collapsed = !_collapsed;
-      if (_collapsed) {
-        _collapseAnimController.reverse();
-      } else {
-        _collapseAnimController.forward();
-      }
+      _showBadge = false;
+    });
+    Future.delayed(_collapseDuration, () {
+      if (mounted) setState(() => _showBadge = true);
     });
     void tryJump([int retry = 0]) {
       if (!mounted || retry > 5) return;
@@ -373,63 +359,68 @@ class PerpetualCalendarState extends State<PerpetualCalendar>
     final calTheme = CalendarTheme.of(theme.brightness);
     final maxH = widget.maxHeight ?? _calendarMaxHeight;
 
-    final collapsedH = calendarCollapsedHeight;
-    final expandedH = calendarExpandedHeight;
-    return AnimatedBuilder(
-      animation: _collapseAnim,
-      builder: (context, child) {
-        final v = _collapseAnim.value;
-        final h = collapsedH + v * (expandedH - collapsedH);
-        final showBadge = !_collapseAnimController.isAnimating;
-        return SizedBox(
-          height: h,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              GestureDetector(
-                onTap: toggleCollapsed,
-                behavior: HitTestBehavior.opaque,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    calendarHorizontalPadding,
-                    calendarVerticalPadding,
-                    calendarHorizontalPadding,
-                    calendarVerticalPadding / 2,
-                  ),
-                  child: Row(
-                    children: [
-                      for (int i = 0; i < _weekdays.length; i++) ...[
-                        if (i > 0) const SizedBox(width: calendarCrossSpacing),
-                        Expanded(
-                          child: Center(
-                            child: Text(
-                              _weekdays[i],
-                              style: TextStyle(
-                                fontSize: weekdayFontSize,
-                                fontWeight: FontWeight.w500,
-                                letterSpacing: weekdayLetterSpacing,
-                                color: (i == 0 || i == 6)
-                                    ? calTheme.weekdayColorWeekend
-                                    : calTheme.weekdayColor,
-                              ),
-                            ),
+    return AnimatedSize(
+      duration: _collapseDuration,
+      curve: Curves.easeInOutCubic,
+      alignment: Alignment.topCenter,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GestureDetector(
+            onTap: toggleCollapsed,
+            behavior: HitTestBehavior.opaque,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                calendarHorizontalPadding,
+                calendarVerticalPadding,
+                calendarHorizontalPadding,
+                calendarVerticalPadding / 2,
+              ),
+              child: Row(
+                children: [
+                  for (int i = 0; i < _weekdays.length; i++) ...[
+                    if (i > 0) const SizedBox(width: calendarCrossSpacing),
+                    Expanded(
+                      child: Center(
+                        child: Text(
+                          _weekdays[i],
+                          style: TextStyle(
+                            fontSize: weekdayFontSize,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: weekdayLetterSpacing,
+                            color: (i == 0 || i == 6)
+                                ? calTheme.weekdayColorWeekend
+                                : calTheme.weekdayColor,
                           ),
                         ),
-                      ],
-                    ],
-                  ),
-                ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              Expanded(
-                child: ClipRect(
-                  child: LayoutBuilder(
+            ),
+          ),
+          ClipRect(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              switchInCurve: Curves.easeOut,
+              switchOutCurve: Curves.easeIn,
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: child,
+              ),
+              child: SizedBox(
+                key: ValueKey(_collapsed),
+                height: _collapsed
+                    ? calendarCollapsedHeight - calendarHeaderHeight
+                    : calendarExpandedHeight - calendarHeaderHeight,
+                child: LayoutBuilder(
                   builder: (_, constraints) {
-                    final maxHeight = constraints.maxHeight.isFinite
-                        ? constraints.maxHeight
-                        : maxH;
-                    final rowH = _collapsedRowHeight;
-                    final fullH = maxHeight.clamp(0.0, maxH);
-                    final h = rowH + _collapseAnim.value * (fullH - rowH);
+                    final w = constraints.maxWidth;
+                    final h = _collapsed
+                        ? _collapsedRowHeight
+                        : (calendarExpandedHeight - calendarHeaderHeight)
+                            .clamp(0.0, maxH);
                     if (_collapsed) {
                       return PageView.builder(
                         controller: _weekPageController,
@@ -446,12 +437,12 @@ class PerpetualCalendarState extends State<PerpetualCalendar>
                               selectedDate: _effectiveSelectedDate,
                               onSelectDate: _onSelectDate,
                               availableHeight: h,
-                              availableWidth: constraints.maxWidth,
-                            dayRows: 1,
-                            weekIndex: wi,
-                            showWatermark: false,
-                            showBadge: showBadge,
-                          ),
+                              availableWidth: w,
+                              dayRows: 1,
+                              weekIndex: wi,
+                              showWatermark: false,
+                              showBadge: _showBadge,
+                            ),
                           );
                         },
                       );
@@ -471,22 +462,21 @@ class PerpetualCalendarState extends State<PerpetualCalendar>
                             selectedDate: _effectiveSelectedDate,
                             onSelectDate: _onSelectDate,
                             availableHeight: h,
-                            availableWidth: constraints.maxWidth,
+                            availableWidth: w,
                             dayRows: 6,
                             showWatermark: true,
-                            showBadge: showBadge,
+                            showBadge: _showBadge,
                           ),
                         );
-                    },
-                  );
-                },
+                      },
+                    );
+                  },
+                ),
               ),
             ),
-            ),
-            ],
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 }

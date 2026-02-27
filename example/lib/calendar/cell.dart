@@ -152,7 +152,7 @@ class CalendarDayCell extends StatelessWidget {
                               ? calTheme.cellBgRest.withValues(alpha: 0.5)
                               : null)),
               border: Border.all(
-                color: isSelected
+                color: isSelected && showBadge
                     ? calTheme.cellBorderSelected
                     : Colors.transparent,
                 width: cellBorderWidth,
