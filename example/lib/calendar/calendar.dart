@@ -501,42 +501,33 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
           ),
         ),
         ClipRect(
-          child: AnimatedSwitcher(
-            duration: useConstraint ? Duration.zero : const Duration(milliseconds: 200),
-            switchInCurve: Curves.easeOut,
-            switchOutCurve: Curves.easeIn,
-            transitionBuilder: (child, animation) =>
-                FadeTransition(opacity: animation, child: child),
-            child: SizedBox(
-              key: ValueKey(_effectiveCollapsed),
-              height: contentHeight,
-              child: LayoutBuilder(
+          child: SizedBox(
+            height: contentHeight,
+            child: LayoutBuilder(
                 builder: (_, constraints) {
                   final w = constraints.maxWidth;
                   final h = contentHeight;
-                  if (_effectiveCollapsed) {
-                    return PageView.builder(
-                      controller: _weekPageController,
-                      itemCount: _totalWeeks,
-                      onPageChanged: _onWeekPageChanged,
-                      physics: const _SensitivePageScrollPhysics(),
-                      itemBuilder: (context, index) {
-                        final weekStart = _weekPageToStartDate(index);
-                        return RepaintBoundary(
-                          child: CalendarWeekRow(
-                            key: ValueKey('w$index'),
-                            weekStart: weekStart,
-                            selectedDate: _effectiveSelectedDate,
-                            onSelectDate: _onSelectDate,
-                            availableHeight: h,
-                            availableWidth: w,
-                            showBadge: _showBadge,
-                          ),
-                        );
-                      },
-                    );
-                  }
-                  return PageView.builder(
+                  final weekView = PageView.builder(
+                    controller: _weekPageController,
+                    itemCount: _totalWeeks,
+                    onPageChanged: _onWeekPageChanged,
+                    physics: const _SensitivePageScrollPhysics(),
+                    itemBuilder: (context, index) {
+                      final weekStart = _weekPageToStartDate(index);
+                      return RepaintBoundary(
+                        child: CalendarWeekRow(
+                          key: ValueKey('w$index'),
+                          weekStart: weekStart,
+                          selectedDate: _effectiveSelectedDate,
+                          onSelectDate: _onSelectDate,
+                          availableHeight: h,
+                          availableWidth: w,
+                          showBadge: _showBadge,
+                        ),
+                      );
+                    },
+                  );
+                  final monthView = PageView.builder(
                     controller: _pageController,
                     itemCount: _totalMonths,
                     onPageChanged: _onPageChanged,
@@ -559,10 +550,14 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
                       );
                     },
                   );
+                  return IndexedStack(
+                    index: _effectiveCollapsed ? 0 : 1,
+                    sizing: StackFit.passthrough,
+                    children: [weekView, monthView],
+                  );
                 },
               ),
             ),
-          ),
         ),
       ],
     );
