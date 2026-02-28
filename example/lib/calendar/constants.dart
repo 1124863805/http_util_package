@@ -18,6 +18,7 @@ const double dayNumberFontSize = 20;
 const double subtitleFontSizeLunar = 10;
 const double subtitleFontSizeTerm = 11;
 const double subtitleFontSizeFestival = 12;
+const double ganZhiFontSize = 9;
 const double todayLabelFontSize = 9;
 const double badgeSize = 14;
 const double badgeFontSize = 8;
@@ -47,6 +48,7 @@ class CalendarDayData {
   final DateTime date;
   final String subtitle;
   final int subtitleType;
+  final String ganZhi;
   final bool showRest;
   final bool showWork;
   final bool isWeekend;
@@ -60,6 +62,7 @@ class CalendarDayData {
     required this.date,
     required this.subtitle,
     required this.subtitleType,
+    required this.ganZhi,
     required this.showRest,
     required this.showWork,
     required this.isWeekend,

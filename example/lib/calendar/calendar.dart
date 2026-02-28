@@ -623,7 +623,6 @@ class PerpetualCalendarState extends State<PerpetualCalendar>
                               onSelectDate: _onSelectDate,
                               availableHeight: calendarMonthContentHeight,
                               availableWidth: w,
-                              dayRows: 6,
                               showWatermark: true,
                               showBadge: _showBadge,
                               selectionTransitionFactor: monthSelectionFactor,

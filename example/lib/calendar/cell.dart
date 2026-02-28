@@ -45,13 +45,14 @@ class RestWorkBadge extends StatelessWidget {
   }
 }
 
-/// 单日格子：公历数字 + 副标题（节日/节气/农历）+ 休/班/今角标
+/// 单日格子：公历数字 + 副标题（节日/节气/农历）+ 干支 + 休/班/今角标
 class CalendarDayCell extends StatelessWidget {
   final int year;
   final int month;
   final int day;
   final String subtitle;
   final int subtitleType;
+  final String ganZhi;
   final bool showRest;
   final bool showWork;
   final bool isWeekend;
@@ -70,6 +71,7 @@ class CalendarDayCell extends StatelessWidget {
     required this.day,
     required this.subtitle,
     required this.subtitleType,
+    required this.ganZhi,
     required this.showRest,
     required this.showWork,
     required this.isWeekend,
@@ -195,6 +197,22 @@ class CalendarDayCell extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             textAlign: TextAlign.center,
                           ),
+                        if (ganZhi.isNotEmpty)
+                          Text(
+                            ganZhi,
+                            style: TextStyle(
+                              fontSize: ganZhiFontSize,
+                              fontWeight: FontWeight.w400,
+                              color: todaySelected
+                                  ? calTheme.cellBorderSelected
+                                  : (isOtherMonth
+                                        ? calTheme.subtitleColorOtherMonth
+                                        : calTheme.subtitleColor),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                          ),
                       ],
                     ),
                   ),
@@ -258,6 +276,7 @@ class CalendarDayCell extends StatelessWidget {
     if (isToday) parts.add('今天');
     parts.add('$month月$day日');
     if (subtitle.isNotEmpty) parts.add(subtitle);
+    if (ganZhi.isNotEmpty) parts.add(ganZhi);
     if (showRest) parts.add('休');
     if (showWork) parts.add('班');
     if (isWeekend && !showRest && !showWork) parts.add('周末');

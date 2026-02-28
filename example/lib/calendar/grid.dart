@@ -4,12 +4,12 @@ import '../tyme4/tyme.dart';
 import 'constants.dart';
 import 'cell.dart';
 
-/// 全局缓存，避免滑动时重复计算农历/节气/节日（tyme4 计算较重）
+/// 全局缓存，避免滑动时重复计算农历/节气/节日/干支（tyme4 计算较重）
 const int _subtitleCacheMaxSize = 2000;
-final Map<String, (String, bool, bool, int)> _subtitleCache = {};
+final Map<String, (String, bool, bool, int, String)> _subtitleCache = {};
 
-/// 优先级：节日 > 节气 > 农历；返回 (副标题, 休, 班, 副标题类型)
-(String subtitle, bool showRest, bool showWork, int subtitleType)
+/// 优先级：节日 > 节气 > 农历；返回 (副标题, 休, 班, 副标题类型, 干支)
+(String subtitle, bool showRest, bool showWork, int subtitleType, String ganZhi)
 getSubtitleAndRest(SolarDay solarDay) {
   final y = solarDay.getYear();
   final m = solarDay.getMonth();
@@ -57,7 +57,8 @@ getSubtitleAndRest(SolarDay solarDay) {
   if (subtitleType != subtitleTypeFestival && subtitle.length > 2) {
     subtitle = subtitle.substring(0, 2);
   }
-  final result = (subtitle, showRest, showWork, subtitleType);
+  final ganZhi = solarDay.getSixtyCycleDay().getSixtyCycle().getName();
+  final result = (subtitle, showRest, showWork, subtitleType, ganZhi);
   if (_subtitleCache.length >= _subtitleCacheMaxSize) _subtitleCache.clear();
   _subtitleCache[k] = result;
   return result;
@@ -101,7 +102,7 @@ class CalendarWeekRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
-    (String, bool, bool, int) getCached(int y, int m, int d) =>
+    (String, bool, bool, int, String) getCached(int y, int m, int d) =>
         getSubtitleAndRest(SolarDay.fromYmd(y, m, d));
     bool isSelected(int y, int m, int d) =>
         selectedDate.year == y &&
@@ -113,7 +114,7 @@ class CalendarWeekRow extends StatelessWidget {
       final d = weekStart.add(Duration(days: i));
       final isMarked = _isMarked(d, markedDates);
       if (isMarked && markedCellBuilder != null) {
-        final (subtitle, showRest, showWork, st) =
+        final (subtitle, showRest, showWork, st, ganZhi) =
             getCached(d.year, d.month, d.day);
         final isOtherMonth = d.month != weekStart.month || d.year != weekStart.year;
         cells.add(
@@ -123,6 +124,7 @@ class CalendarWeekRow extends StatelessWidget {
               date: d,
               subtitle: subtitle,
               subtitleType: st,
+              ganZhi: ganZhi,
               showRest: showRest,
               showWork: showWork,
               isWeekend: i == 0 || i == 6,
@@ -135,7 +137,7 @@ class CalendarWeekRow extends StatelessWidget {
           ),
         );
       } else {
-        final (subtitle, showRest, showWork, st) =
+        final (subtitle, showRest, showWork, st, ganZhi) =
             getCached(d.year, d.month, d.day);
         final isOtherMonth = d.month != weekStart.month || d.year != weekStart.year;
         cells.add(
@@ -145,6 +147,7 @@ class CalendarWeekRow extends StatelessWidget {
             day: d.day,
             subtitle: subtitle,
             subtitleType: st,
+            ganZhi: ganZhi,
             showRest: showRest,
             showWork: showWork,
             isWeekend: i == 0 || i == 6,
@@ -219,6 +222,7 @@ class CalendarMonthGrid extends StatelessWidget {
   final void Function(DateTime date) onSelectDate;
   final double availableHeight;
   final double availableWidth;
+  /// 月历行数，0 表示根据当月首日星期与天数自动计算（4/5/6 行）
   final int dayRows;
   final int weekIndex;
   final bool showWatermark;
@@ -235,7 +239,7 @@ class CalendarMonthGrid extends StatelessWidget {
     required this.onSelectDate,
     required this.availableHeight,
     required this.availableWidth,
-    this.dayRows = 6,
+    this.dayRows = 0,
     this.weekIndex = 0,
     this.showWatermark = true,
     this.showBadge = true,
@@ -253,19 +257,20 @@ class CalendarMonthGrid extends StatelessWidget {
     }
     return false;
   }
-  static const int _fullRows = 6;
-
   @override
   Widget build(BuildContext context) {
     final solarMonth = SolarMonth.fromYm(year, month);
     final dayCount = solarMonth.getDayCount();
     final firstWeekday = solarMonth.getFirstDay().getWeek().getIndex();
+    final effectiveDayRows = dayRows > 0
+        ? dayRows
+        : ((firstWeekday + dayCount) / 7).ceil();
     final prevMonth = solarMonth.next(-1);
     final prevDayCount = prevMonth.getDayCount();
     final nextMonth = solarMonth.next(1);
     final now = DateTime.now();
 
-    (String, bool, bool, int) getCached(int y, int m, int d) =>
+    (String, bool, bool, int, String) getCached(int y, int m, int d) =>
         getSubtitleAndRest(SolarDay.fromYmd(y, m, d));
 
     bool isSelected(int y, int m, int d) =>
@@ -282,7 +287,7 @@ class CalendarMonthGrid extends StatelessWidget {
       final pm = prevMonth.month;
       final date = DateTime(py, pm, d);
       if (_isMarked(py, pm, d, markedDates) && markedCellBuilder != null) {
-        final (subtitle, showRest, showWork, st) = getCached(py, pm, d);
+        final (subtitle, showRest, showWork, st, ganZhi) = getCached(py, pm, d);
         cells.add(
           markedCellBuilder!(
             context,
@@ -290,6 +295,7 @@ class CalendarMonthGrid extends StatelessWidget {
               date: date,
               subtitle: subtitle,
               subtitleType: st,
+              ganZhi: ganZhi,
               showRest: showRest,
               showWork: showWork,
               isWeekend: cellIndex % 7 == 0 || cellIndex % 7 == 6,
@@ -302,7 +308,7 @@ class CalendarMonthGrid extends StatelessWidget {
           ),
         );
       } else {
-        final (subtitle, showRest, showWork, st) = getCached(py, pm, d);
+        final (subtitle, showRest, showWork, st, ganZhi) = getCached(py, pm, d);
         cells.add(
           CalendarDayCell(
             year: py,
@@ -310,6 +316,7 @@ class CalendarMonthGrid extends StatelessWidget {
             day: d,
             subtitle: subtitle,
             subtitleType: st,
+            ganZhi: ganZhi,
             showRest: showRest,
             showWork: showWork,
             isWeekend: cellIndex % 7 == 0 || cellIndex % 7 == 6,
@@ -327,7 +334,7 @@ class CalendarMonthGrid extends StatelessWidget {
     for (int d = 1; d <= dayCount; d++) {
       final date = DateTime(year, month, d);
       if (_isMarked(year, month, d, markedDates) && markedCellBuilder != null) {
-        final (subtitle, showRest, showWork, st) = getCached(year, month, d);
+        final (subtitle, showRest, showWork, st, ganZhi) = getCached(year, month, d);
         cells.add(
           markedCellBuilder!(
             context,
@@ -335,6 +342,7 @@ class CalendarMonthGrid extends StatelessWidget {
               date: date,
               subtitle: subtitle,
               subtitleType: st,
+              ganZhi: ganZhi,
               showRest: showRest,
               showWork: showWork,
               isWeekend: cellIndex % 7 == 0 || cellIndex % 7 == 6,
@@ -347,7 +355,7 @@ class CalendarMonthGrid extends StatelessWidget {
           ),
         );
       } else {
-        final (subtitle, showRest, showWork, st) = getCached(year, month, d);
+        final (subtitle, showRest, showWork, st, ganZhi) = getCached(year, month, d);
         cells.add(
           CalendarDayCell(
             year: year,
@@ -355,6 +363,7 @@ class CalendarMonthGrid extends StatelessWidget {
             day: d,
             subtitle: subtitle,
             subtitleType: st,
+            ganZhi: ganZhi,
             showRest: showRest,
             showWork: showWork,
             isWeekend: cellIndex % 7 == 0 || cellIndex % 7 == 6,
@@ -369,13 +378,13 @@ class CalendarMonthGrid extends StatelessWidget {
       }
       cellIndex++;
     }
-    final nextCount = _cols * _fullRows - firstWeekday - dayCount;
+    final nextCount = _cols * effectiveDayRows - firstWeekday - dayCount;
     for (int d = 1; d <= nextCount; d++) {
       final ny = nextMonth.year;
       final nm = nextMonth.month;
       final date = DateTime(ny, nm, d);
       if (_isMarked(ny, nm, d, markedDates) && markedCellBuilder != null) {
-        final (subtitle, showRest, showWork, st) = getCached(ny, nm, d);
+        final (subtitle, showRest, showWork, st, ganZhi) = getCached(ny, nm, d);
         cells.add(
           markedCellBuilder!(
             context,
@@ -383,6 +392,7 @@ class CalendarMonthGrid extends StatelessWidget {
               date: date,
               subtitle: subtitle,
               subtitleType: st,
+              ganZhi: ganZhi,
               showRest: showRest,
               showWork: showWork,
               isWeekend: cellIndex % 7 == 0 || cellIndex % 7 == 6,
@@ -395,7 +405,7 @@ class CalendarMonthGrid extends StatelessWidget {
           ),
         );
       } else {
-        final (subtitle, showRest, showWork, st) = getCached(ny, nm, d);
+        final (subtitle, showRest, showWork, st, ganZhi) = getCached(ny, nm, d);
         cells.add(
           CalendarDayCell(
             year: ny,
@@ -403,6 +413,7 @@ class CalendarMonthGrid extends StatelessWidget {
             day: d,
             subtitle: subtitle,
             subtitleType: st,
+            ganZhi: ganZhi,
             showRest: showRest,
             showWork: showWork,
             isWeekend: cellIndex % 7 == 0 || cellIndex % 7 == 6,
@@ -421,12 +432,12 @@ class CalendarMonthGrid extends StatelessWidget {
     final contentWidth = availableWidth - calendarHorizontalPadding * 2;
     final cellWidth =
         (contentWidth - calendarCrossSpacing * (_cols - 1)) / _cols;
-    final cellHeight = availableHeight / dayRows;
+    final cellHeight = availableHeight / effectiveDayRows;
     final aspectRatio = cellWidth / cellHeight;
 
     final start = (weekIndex * _cols).clamp(0, cells.length);
     final end = ((weekIndex + 1) * _cols).clamp(0, cells.length);
-    final displayCells = dayRows == 1
+    final displayCells = effectiveDayRows == 1
         ? (start < end ? cells.sublist(start, end) : <Widget>[])
         : cells;
 
