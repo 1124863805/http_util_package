@@ -206,6 +206,7 @@ class PerpetualCalendarState extends State<PerpetualCalendar>
       final sel = _effectiveSelectedDate;
       final inViewedMonth = sel.year == _viewDate.year && sel.month == _viewDate.month;
       final targetDate = inViewedMonth ? sel : _viewDate;
+      _viewDate = targetDate;
       final targetWeekPage = _dateToWeekPageIndex(targetDate);
       void jumpWeek() {
         if (mounted && _weekPageController.hasClients) {
@@ -333,8 +334,11 @@ class PerpetualCalendarState extends State<PerpetualCalendar>
           _setViewDateFromMonthPage(page.clamp(0, _totalMonths - 1));
         }
         final sel = _effectiveSelectedDate;
-        if (sel.year == _viewDate.year && sel.month == _viewDate.month) {
-          _viewDate = sel;
+        _viewDate = (sel.year == _viewDate.year && sel.month == _viewDate.month)
+            ? sel
+            : _viewDate;
+        if (_weekPageController.hasClients) {
+          _weekPageController.jumpToPage(_dateToWeekPageIndex(_viewDate));
         }
       } else {
         if (_weekPageController.hasClients) {
