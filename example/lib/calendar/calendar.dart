@@ -95,10 +95,6 @@ class PerpetualCalendarState extends State<PerpetualCalendar>
       );
 
   int get _weekPage {
-    if (widget.constrainedHeight != null) {
-      final ch = widget.constrainedHeight! - calendarHeaderHeight;
-      if (ch < calendarWeekContentHeight) return _dateToWeekPageIndex(_effectiveSelectedDate);
-    }
     return _dateToWeekPageIndex(_viewDate);
   }
 
@@ -118,8 +114,30 @@ class PerpetualCalendarState extends State<PerpetualCalendar>
     _viewDate = _weekPageToStartDate(page);
   }
 
-  /// 收起时显示的周：始终显示选中日期所在周
-  DateTime _computeViewDateForCollapse() => _effectiveSelectedDate;
+  /// 该周是否包含当前月的任意一天（周视图跨月时，周起始日可能在上月）
+  bool _weekContainsCurrentMonth(DateTime weekStart) {
+    final now = DateTime.now();
+    for (int i = 0; i < 7; i++) {
+      final d = weekStart.add(Duration(days: i));
+      if (d.year == now.year && d.month == now.month) return true;
+    }
+    return false;
+  }
+
+  /// 从周起始日推导应展示的月份：跨月周优先展示含「1号」的月份
+  DateTime _monthFromWeek(DateTime weekStart) {
+    for (int i = 0; i < 7; i++) {
+      final d = weekStart.add(Duration(days: i));
+      if (d.day == 1) return DateTime(d.year, d.month, 1);
+    }
+    return DateTime(weekStart.year, weekStart.month, 1);
+  }
+
+  /// 该周是否包含指定日期
+  bool _weekContainsDate(DateTime weekStart, DateTime date) {
+    final end = weekStart.add(const Duration(days: 6));
+    return !date.isBefore(weekStart) && !date.isAfter(end);
+  }
 
   @override
   void initState() {
@@ -185,8 +203,10 @@ class PerpetualCalendarState extends State<PerpetualCalendar>
     final oldCollapsed = oldCh != null && (oldCh - calendarHeaderHeight) < calendarWeekContentHeight;
     if (widget.collapsed == true && oldWidget.collapsed != true ||
         newCollapsed && !oldCollapsed) {
-      _viewDate = _computeViewDateForCollapse();
-      final targetWeekPage = _dateToWeekPageIndex(_viewDate);
+      final sel = _effectiveSelectedDate;
+      final inViewedMonth = sel.year == _viewDate.year && sel.month == _viewDate.month;
+      final targetDate = inViewedMonth ? sel : _viewDate;
+      final targetWeekPage = _dateToWeekPageIndex(targetDate);
       void jumpWeek() {
         if (mounted && _weekPageController.hasClients) {
           _weekPageController.jumpToPage(targetWeekPage);
@@ -199,15 +219,24 @@ class PerpetualCalendarState extends State<PerpetualCalendar>
       }
     }
     if (!newCollapsed && oldCollapsed) {
-      _viewDate = _effectiveSelectedDate;
+      final weekIdx = _weekPageController.hasClients
+          ? (_weekPageController.page?.round() ?? _weekPage)
+          : _weekPage;
+      final weekStart = _weekPageToStartDate(weekIdx);
+      final sel = _effectiveSelectedDate;
+      final targetDate = _weekContainsDate(weekStart, sel)
+          ? sel
+          : (_weekContainsCurrentMonth(weekStart)
+              ? sel
+              : _monthFromWeek(weekStart));
+      final targetMonthPage = (targetDate.year - _baseYear) * 12 + targetDate.month - 1;
+      _viewDate = DateTime(targetDate.year, targetDate.month, 1);
       if (_pageController.hasClients) {
-        final page = (_viewDate.year - _baseYear) * 12 + _viewDate.month - 1;
-        _pageController.jumpToPage(page.clamp(0, _totalMonths - 1));
+        _pageController.jumpToPage(targetMonthPage.clamp(0, _totalMonths - 1));
       } else {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted && _pageController.hasClients) {
-            final page = (_viewDate.year - _baseYear) * 12 + _viewDate.month - 1;
-            _pageController.jumpToPage(page.clamp(0, _totalMonths - 1));
+            _pageController.jumpToPage(targetMonthPage.clamp(0, _totalMonths - 1));
           }
         });
       }
@@ -303,17 +332,21 @@ class PerpetualCalendarState extends State<PerpetualCalendar>
           final page = _pageController.page?.round() ?? _monthPage;
           _setViewDateFromMonthPage(page.clamp(0, _totalMonths - 1));
         }
-        _viewDate = _computeViewDateForCollapse();
+        final sel = _effectiveSelectedDate;
+        if (sel.year == _viewDate.year && sel.month == _viewDate.month) {
+          _viewDate = sel;
+        }
       } else {
         if (_weekPageController.hasClients) {
           final page = _weekPageController.page?.round() ?? _weekPage;
           _setViewDateFromWeekPage(page.clamp(0, _totalWeeks - 1));
-          final selected = _effectiveSelectedDate;
-          if (selected.year != _viewDate.year ||
-              selected.month != _viewDate.month) {
-            _viewDate = selected;
-          }
         }
+        final sel = _effectiveSelectedDate;
+        _viewDate = _weekContainsDate(_viewDate, sel)
+            ? sel
+            : (_weekContainsCurrentMonth(_viewDate)
+                ? sel
+                : _monthFromWeek(_viewDate));
       }
       _collapsed = !_collapsed;
       _showBadge = false;
