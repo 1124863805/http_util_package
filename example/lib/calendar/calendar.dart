@@ -75,7 +75,7 @@ class PerpetualCalendarState extends State<PerpetualCalendar>
   bool get _effectiveCollapsed {
     if (widget.constrainedHeight != null) {
       final ch = widget.constrainedHeight! - calendarHeaderHeight;
-      return ch < 160;
+      return ch < calendarWeekContentHeight;
     }
     return widget.collapsed ?? _collapsed;
   }
@@ -97,7 +97,7 @@ class PerpetualCalendarState extends State<PerpetualCalendar>
   int get _weekPage {
     if (widget.constrainedHeight != null) {
       final ch = widget.constrainedHeight! - calendarHeaderHeight;
-      if (ch < 160) return _dateToWeekPageIndex(_effectiveSelectedDate);
+      if (ch < calendarWeekContentHeight) return _dateToWeekPageIndex(_effectiveSelectedDate);
     }
     return _dateToWeekPageIndex(_viewDate);
   }
@@ -181,8 +181,8 @@ class PerpetualCalendarState extends State<PerpetualCalendar>
     }
     final newCh = widget.constrainedHeight;
     final oldCh = oldWidget.constrainedHeight;
-    final newCollapsed = newCh != null && (newCh - calendarHeaderHeight) < 160;
-    final oldCollapsed = oldCh != null && (oldCh - calendarHeaderHeight) < 160;
+    final newCollapsed = newCh != null && (newCh - calendarHeaderHeight) < calendarWeekContentHeight;
+    final oldCollapsed = oldCh != null && (oldCh - calendarHeaderHeight) < calendarWeekContentHeight;
     if (widget.collapsed == true && oldWidget.collapsed != true ||
         newCollapsed && !oldCollapsed) {
       _viewDate = _computeViewDateForCollapse();
@@ -529,7 +529,6 @@ class PerpetualCalendarState extends State<PerpetualCalendar>
             child: LayoutBuilder(
                 builder: (_, constraints) {
                   final w = constraints.maxWidth;
-                  final h = contentHeight;
                   return AnimatedBuilder(
                     animation: _transitionAnimation,
                     builder: (context, _) {
@@ -551,7 +550,7 @@ class PerpetualCalendarState extends State<PerpetualCalendar>
                               weekStart: weekStart,
                               selectedDate: _effectiveSelectedDate,
                               onSelectDate: _onSelectDate,
-                              availableHeight: h,
+                              availableHeight: calendarWeekContentHeight,
                               availableWidth: w,
                               showBadge: _showBadge,
                               selectionTransitionFactor: weekSelectionFactor,
@@ -573,7 +572,7 @@ class PerpetualCalendarState extends State<PerpetualCalendar>
                               month: m,
                               selectedDate: _effectiveSelectedDate,
                               onSelectDate: _onSelectDate,
-                              availableHeight: h,
+                              availableHeight: calendarMonthContentHeight,
                               availableWidth: w,
                               dayRows: 6,
                               showWatermark: true,

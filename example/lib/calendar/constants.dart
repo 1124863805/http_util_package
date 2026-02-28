@@ -33,6 +33,11 @@ const double calendarRowHeight =
     (calendarExpandedHeight - calendarHeaderHeight) / 6;
 const double calendarCollapsedHeight = calendarHeaderHeight + calendarRowHeight;
 
+/// 周视图内容区高度（1 行）
+const double calendarWeekContentHeight = calendarRowHeight;
+/// 月视图内容区高度（6 行）
+const double calendarMonthContentHeight = calendarRowHeight * 6;
+
 const int subtitleTypeFestival = 0;
 const int subtitleTypeTerm = 1;
 const int subtitleTypeLunar = 2;
