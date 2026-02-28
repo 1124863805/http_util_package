@@ -59,6 +59,8 @@ class CalendarDayCell extends StatelessWidget {
   final bool isToday;
   final bool isSelected;
   final bool showBadge;
+  /// 选中效果强度 0~1，切换视图时淡出侧可传入 <1 以弱化选中，避免双高亮
+  final double selectionTransitionFactor;
   final VoidCallback onTap;
 
   const CalendarDayCell({
@@ -73,8 +75,9 @@ class CalendarDayCell extends StatelessWidget {
     required this.isWeekend,
     required this.isOtherMonth,
     required this.isToday,
-    required this.isSelected,
+    required     this.isSelected,
     this.showBadge = true,
+    this.selectionTransitionFactor = 1.0,
     required this.onTap,
   });
 
@@ -128,6 +131,14 @@ class CalendarDayCell extends StatelessWidget {
     }
 
     final radius = BorderRadius.all(Radius.circular(cellBorderRadius));
+    final selectionStrength = isSelected ? selectionTransitionFactor : 0.0;
+    final borderColor = selectionStrength > 0 && showBadge
+        ? Color.lerp(
+            Colors.transparent,
+            calTheme.cellBorderSelected,
+            selectionStrength,
+          )!
+        : Colors.transparent;
     return Semantics(
       label: _semanticsLabel(),
       button: true,
@@ -140,21 +151,22 @@ class CalendarDayCell extends StatelessWidget {
             onTap();
           },
           borderRadius: radius,
-          child: Container(
+          child: AnimatedContainer(
+            duration: cellSelectionTransitionDuration,
+            curve: Curves.easeOut,
             decoration: BoxDecoration(
               borderRadius: radius,
               // 休/今/选中背景：休用低透明度(0.5)不遮挡水印；今和选中用 0.85
-              color: todaySelected
-                  ? calTheme.cellBgSelected.withValues(alpha: 0.85)
+              color: todaySelected && selectionTransitionFactor > 0
+                  ? calTheme.cellBgSelected
+                      .withValues(alpha: 0.85 * selectionTransitionFactor)
                   : (isToday
                         ? calTheme.cellBgToday.withValues(alpha: 0.85)
                         : (showRest
                               ? calTheme.cellBgRest.withValues(alpha: 0.5)
                               : null)),
               border: Border.all(
-                color: isSelected && showBadge
-                    ? calTheme.cellBorderSelected
-                    : Colors.transparent,
+                color: borderColor,
                 width: cellBorderWidth,
               ),
             ),

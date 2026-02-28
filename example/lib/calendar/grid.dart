@@ -71,6 +71,7 @@ class CalendarWeekRow extends StatelessWidget {
   final double availableHeight;
   final double availableWidth;
   final bool showBadge;
+  final double selectionTransitionFactor;
 
   const CalendarWeekRow({
     super.key,
@@ -80,6 +81,7 @@ class CalendarWeekRow extends StatelessWidget {
     required this.availableHeight,
     required this.availableWidth,
     this.showBadge = true,
+    this.selectionTransitionFactor = 1.0,
   });
 
   static const int _cols = 7;
@@ -114,6 +116,7 @@ class CalendarWeekRow extends StatelessWidget {
           isToday: now.year == d.year && now.month == d.month && now.day == d.day,
           isSelected: isSelected(d.year, d.month, d.day),
           showBadge: showBadge,
+          selectionTransitionFactor: selectionTransitionFactor,
           onTap: () => onSelectDate(d),
         ),
       );
@@ -183,6 +186,7 @@ class CalendarMonthGrid extends StatelessWidget {
   final int weekIndex;
   final bool showWatermark;
   final bool showBadge;
+  final double selectionTransitionFactor;
 
   const CalendarMonthGrid({
     super.key,
@@ -196,6 +200,7 @@ class CalendarMonthGrid extends StatelessWidget {
     this.weekIndex = 0,
     this.showWatermark = true,
     this.showBadge = true,
+    this.selectionTransitionFactor = 1.0,
   });
 
   static const int _cols = 7;
@@ -241,6 +246,7 @@ class CalendarMonthGrid extends StatelessWidget {
           isToday: now.year == py && now.month == pm && now.day == d,
           isSelected: isSelected(py, pm, d),
           showBadge: showBadge,
+          selectionTransitionFactor: selectionTransitionFactor,
           onTap: () => onSelectDate(DateTime(py, pm, d)),
         ),
       );
@@ -262,6 +268,7 @@ class CalendarMonthGrid extends StatelessWidget {
           isToday: now.year == year && now.month == month && now.day == d,
           isSelected: isSelected(year, month, d),
           showBadge: showBadge,
+          selectionTransitionFactor: selectionTransitionFactor,
           onTap: () => onSelectDate(DateTime(year, month, d)),
         ),
       );
@@ -286,6 +293,7 @@ class CalendarMonthGrid extends StatelessWidget {
           isToday: now.year == ny && now.month == nm && now.day == d,
           isSelected: isSelected(ny, nm, d),
           showBadge: showBadge,
+          selectionTransitionFactor: selectionTransitionFactor,
           onTap: () => onSelectDate(DateTime(ny, nm, d)),
         ),
       );

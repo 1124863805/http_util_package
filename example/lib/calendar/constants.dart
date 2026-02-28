@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 const double cellBorderRadius = 8;
 const double cellBorderWidth = 1.5;
 
+/// 选中格子边框/背景的过渡时长，与周/月切换一致
+const Duration cellSelectionTransitionDuration = Duration(milliseconds: 200);
+
 const double calendarHorizontalPadding = 16;
 const double calendarCrossSpacing = 8;
 const double calendarVerticalPadding = 6;

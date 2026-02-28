@@ -49,7 +49,8 @@ class PerpetualCalendar extends StatefulWidget {
 }
 
 /// 供外部通过 GlobalKey 调用：goPrevMonth、goNextMonth、showYearMonthPicker
-class PerpetualCalendarState extends State<PerpetualCalendar> {
+class PerpetualCalendarState extends State<PerpetualCalendar>
+    with TickerProviderStateMixin {
   static const int _baseYear = 1900;
   static const int _endYear = 2099;
   static final DateTime _weekEpoch = DateTime(1899, 12, 31);
@@ -67,6 +68,8 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
   bool _collapsed = false;
   bool _showBadge = true;
   bool _isToggling = false;
+  late AnimationController _transitionController;
+  late Animation<double> _transitionAnimation;
 
   DateTime get _effectiveSelectedDate => widget.selectedDate ?? _selectedDate;
   bool get _effectiveCollapsed {
@@ -126,6 +129,14 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
     _viewDate = init;
     _pageController = PageController(initialPage: _monthPage);
     _weekPageController = PageController(initialPage: _weekPage);
+    _transitionController = AnimationController(
+      vsync: this,
+      duration: cellSelectionTransitionDuration,
+    )..value = _effectiveCollapsed ? 0 : 1;
+    _transitionAnimation = CurvedAnimation(
+      parent: _transitionController,
+      curve: Curves.easeInOut,
+    );
     widget.controller?._attach(this);
     _schedulePrefetch(_monthPage);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -201,6 +212,17 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
         });
       }
     }
+    final useConstraint = widget.constrainedHeight != null;
+    final target = _effectiveCollapsed ? 0.0 : 1.0;
+    if (useConstraint) {
+      _transitionController.value = target;
+    } else if ((_transitionController.value - target).abs() > 0.01) {
+      if (target > 0.5) {
+        _transitionController.forward();
+      } else {
+        _transitionController.reverse();
+      }
+    }
   }
 
   void _schedulePrefetch(int pageIndex) {
@@ -224,6 +246,7 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
     widget.controller?._detach();
     _pageController.dispose();
     _weekPageController.dispose();
+    _transitionController.dispose();
     super.dispose();
   }
 
@@ -507,74 +530,79 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
                 builder: (_, constraints) {
                   final w = constraints.maxWidth;
                   final h = contentHeight;
-                  final weekView = PageView.builder(
-                    controller: _weekPageController,
-                    itemCount: _totalWeeks,
-                    onPageChanged: _onWeekPageChanged,
-                    physics: const _SensitivePageScrollPhysics(),
-                    itemBuilder: (context, index) {
-                      final weekStart = _weekPageToStartDate(index);
-                      return RepaintBoundary(
-                        child: CalendarWeekRow(
-                          key: ValueKey('w$index'),
-                          weekStart: weekStart,
-                          selectedDate: _effectiveSelectedDate,
-                          onSelectDate: _onSelectDate,
-                          availableHeight: h,
-                          availableWidth: w,
-                          showBadge: _showBadge,
-                        ),
+                  return AnimatedBuilder(
+                    animation: _transitionAnimation,
+                    builder: (context, _) {
+                      final tv = useConstraint
+                          ? (_effectiveCollapsed ? 0.0 : 1.0)
+                          : _transitionAnimation.value;
+                      final weekSelectionFactor = 1 - tv;
+                      final monthSelectionFactor = tv;
+                      final weekView = PageView.builder(
+                        controller: _weekPageController,
+                        itemCount: _totalWeeks,
+                        onPageChanged: _onWeekPageChanged,
+                        physics: const _SensitivePageScrollPhysics(),
+                        itemBuilder: (context, index) {
+                          final weekStart = _weekPageToStartDate(index);
+                          return RepaintBoundary(
+                            child: CalendarWeekRow(
+                              key: ValueKey('w$index'),
+                              weekStart: weekStart,
+                              selectedDate: _effectiveSelectedDate,
+                              onSelectDate: _onSelectDate,
+                              availableHeight: h,
+                              availableWidth: w,
+                              showBadge: _showBadge,
+                              selectionTransitionFactor: weekSelectionFactor,
+                            ),
+                          );
+                        },
+                      );
+                      final monthView = PageView.builder(
+                        controller: _pageController,
+                        itemCount: _totalMonths,
+                        onPageChanged: _onPageChanged,
+                        physics: const _SensitivePageScrollPhysics(),
+                        itemBuilder: (context, index) {
+                          final (y, m) = _pageToYearMonth(index);
+                          return RepaintBoundary(
+                            child: CalendarMonthGrid(
+                              key: ValueKey('m$index'),
+                              year: y,
+                              month: m,
+                              selectedDate: _effectiveSelectedDate,
+                              onSelectDate: _onSelectDate,
+                              availableHeight: h,
+                              availableWidth: w,
+                              dayRows: 6,
+                              showWatermark: true,
+                              showBadge: _showBadge,
+                              selectionTransitionFactor: monthSelectionFactor,
+                            ),
+                          );
+                        },
+                      );
+                      return Stack(
+                        fit: StackFit.passthrough,
+                        children: [
+                          IgnorePointer(
+                            ignoring: !_effectiveCollapsed,
+                            child: Opacity(
+                              opacity: 1 - tv,
+                              child: weekView,
+                            ),
+                          ),
+                          IgnorePointer(
+                            ignoring: _effectiveCollapsed,
+                            child: Opacity(
+                              opacity: tv,
+                              child: monthView,
+                            ),
+                          ),
+                        ],
                       );
                     },
-                  );
-                  final monthView = PageView.builder(
-                    controller: _pageController,
-                    itemCount: _totalMonths,
-                    onPageChanged: _onPageChanged,
-                    physics: const _SensitivePageScrollPhysics(),
-                    itemBuilder: (context, index) {
-                      final (y, m) = _pageToYearMonth(index);
-                      return RepaintBoundary(
-                        child: CalendarMonthGrid(
-                          key: ValueKey('m$index'),
-                          year: y,
-                          month: m,
-                          selectedDate: _effectiveSelectedDate,
-                          onSelectDate: _onSelectDate,
-                          availableHeight: h,
-                          availableWidth: w,
-                          dayRows: 6,
-                          showWatermark: true,
-                          showBadge: _showBadge,
-                        ),
-                      );
-                    },
-                  );
-                  final duration = useConstraint
-                      ? Duration.zero
-                      : const Duration(milliseconds: 200);
-                  return Stack(
-                    fit: StackFit.passthrough,
-                    children: [
-                      IgnorePointer(
-                        ignoring: !_effectiveCollapsed,
-                        child: AnimatedOpacity(
-                          opacity: _effectiveCollapsed ? 1 : 0,
-                          duration: duration,
-                          curve: Curves.easeOut,
-                          child: weekView,
-                        ),
-                      ),
-                      IgnorePointer(
-                        ignoring: _effectiveCollapsed,
-                        child: AnimatedOpacity(
-                          opacity: _effectiveCollapsed ? 0 : 1,
-                          duration: duration,
-                          curve: Curves.easeIn,
-                          child: monthView,
-                        ),
-                      ),
-                    ],
                   );
                 },
               ),
