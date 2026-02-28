@@ -550,10 +550,31 @@ class PerpetualCalendarState extends State<PerpetualCalendar> {
                       );
                     },
                   );
-                  return IndexedStack(
-                    index: _effectiveCollapsed ? 0 : 1,
-                    sizing: StackFit.passthrough,
-                    children: [weekView, monthView],
+                  final duration = useConstraint
+                      ? Duration.zero
+                      : const Duration(milliseconds: 200);
+                  return Stack(
+                    fit: StackFit.passthrough,
+                    children: [
+                      IgnorePointer(
+                        ignoring: !_effectiveCollapsed,
+                        child: AnimatedOpacity(
+                          opacity: _effectiveCollapsed ? 1 : 0,
+                          duration: duration,
+                          curve: Curves.easeOut,
+                          child: weekView,
+                        ),
+                      ),
+                      IgnorePointer(
+                        ignoring: _effectiveCollapsed,
+                        child: AnimatedOpacity(
+                          opacity: _effectiveCollapsed ? 0 : 1,
+                          duration: duration,
+                          curve: Curves.easeIn,
+                          child: monthView,
+                        ),
+                      ),
+                    ],
                   );
                 },
               ),
