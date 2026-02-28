@@ -529,6 +529,10 @@ class PerpetualCalendarState extends State<PerpetualCalendar>
             child: LayoutBuilder(
                 builder: (_, constraints) {
                   final w = constraints.maxWidth;
+                  final monthFullyVisible = contentHeight >= calendarMonthContentHeight;
+                  final monthPhysics = monthFullyVisible
+                      ? const _SensitivePageScrollPhysics()
+                      : const NeverScrollableScrollPhysics();
                   return AnimatedBuilder(
                     animation: _transitionAnimation,
                     builder: (context, _) {
@@ -562,7 +566,7 @@ class PerpetualCalendarState extends State<PerpetualCalendar>
                         controller: _pageController,
                         itemCount: _totalMonths,
                         onPageChanged: _onPageChanged,
-                        physics: const _SensitivePageScrollPhysics(),
+                        physics: monthPhysics,
                         itemBuilder: (context, index) {
                           final (y, m) = _pageToYearMonth(index);
                           return RepaintBoundary(
