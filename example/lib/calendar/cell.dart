@@ -75,7 +75,7 @@ class CalendarDayCell extends StatelessWidget {
     required this.isWeekend,
     required this.isOtherMonth,
     required this.isToday,
-    required     this.isSelected,
+    required this.isSelected,
     this.showBadge = true,
     this.selectionTransitionFactor = 1.0,
     required this.onTap,

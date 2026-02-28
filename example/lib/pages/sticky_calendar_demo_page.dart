@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../calendar/calendar.dart';
+import '../calendar/constants.dart';
 
 /// 吸顶日历演示：滑动吸顶、自动收起为周视图
 class StickyCalendarDemoPage extends StatefulWidget {
@@ -19,6 +20,61 @@ class _StickyCalendarDemoPageState extends State<StickyCalendarDemoPage> {
     _date = DateTime.now();
   }
 
+  List<DateTime> get _markedDates {
+    final now = DateTime.now();
+    return [
+      now,
+      now.add(const Duration(days: 3)),
+      now.add(const Duration(days: 7)),
+    ];
+  }
+
+  Widget _markedCellBuilder(BuildContext context, CalendarDayData data) {
+    final theme = Theme.of(context);
+    final calTheme = CalendarTheme.of(theme.brightness);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: data.onTap,
+        borderRadius: BorderRadius.circular(cellBorderRadius),
+        child: Container(
+          decoration: BoxDecoration(
+            color: calTheme.markerDotColor.withValues(alpha: 0.2),
+            borderRadius: BorderRadius.circular(cellBorderRadius),
+            border: data.isSelected
+                ? Border.all(color: calTheme.cellBorderSelected, width: cellBorderWidth)
+                : null,
+          ),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  '${data.date.day}',
+                  style: TextStyle(
+                    fontSize: dayNumberFontSize,
+                    fontWeight: FontWeight.w700,
+                    color: calTheme.markerDotColor,
+                  ),
+                ),
+                if (data.subtitle.isNotEmpty)
+                  Text(
+                    data.subtitle,
+                    style: TextStyle(
+                      fontSize: subtitleFontSizeLunar,
+                      color: calTheme.subtitleColor,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -29,6 +85,8 @@ class _StickyCalendarDemoPageState extends State<StickyCalendarDemoPage> {
       body: StickyPerpetualCalendar(
         selectedDate: _date,
         onDateSelected: (d) => setState(() => _date = d),
+        markedDates: _markedDates,
+        markedCellBuilder: _markedCellBuilder,
         children: _buildListItems(),
       ),
     );

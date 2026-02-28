@@ -31,6 +31,10 @@ class PerpetualCalendar extends StatefulWidget {
   final double? constrainedHeight;
   /// 视图变化回调（滑动切月/切周时），用于吸顶场景保持视图状态
   final ValueChanged<DateTime>? onViewDateChanged;
+  /// 需特殊标记的日期（可多个）
+  final Iterable<DateTime>? markedDates;
+  /// 标记日期的自定义格子 UI，传入 CalendarDayData，返回 null 则使用默认格子
+  final Widget Function(BuildContext context, CalendarDayData data)? markedCellBuilder;
 
   const PerpetualCalendar({
     super.key,
@@ -42,6 +46,8 @@ class PerpetualCalendar extends StatefulWidget {
     this.collapsed,
     this.constrainedHeight,
     this.onViewDateChanged,
+    this.markedDates,
+    this.markedCellBuilder,
   });
 
   @override
@@ -595,6 +601,8 @@ class PerpetualCalendarState extends State<PerpetualCalendar>
                               availableWidth: w,
                               showBadge: _showBadge,
                               selectionTransitionFactor: weekSelectionFactor,
+                              markedDates: widget.markedDates,
+                              markedCellBuilder: widget.markedCellBuilder,
                             ),
                           );
                         },
@@ -619,6 +627,8 @@ class PerpetualCalendarState extends State<PerpetualCalendar>
                               showWatermark: true,
                               showBadge: _showBadge,
                               selectionTransitionFactor: monthSelectionFactor,
+                              markedDates: widget.markedDates,
+                              markedCellBuilder: widget.markedCellBuilder,
                             ),
                           );
                         },
@@ -668,12 +678,16 @@ class StickyPerpetualCalendar extends StatefulWidget {
   final DateTime selectedDate;
   final ValueChanged<DateTime> onDateSelected;
   final List<Widget> children;
+  final Iterable<DateTime>? markedDates;
+  final Widget Function(BuildContext context, CalendarDayData data)? markedCellBuilder;
 
   const StickyPerpetualCalendar({
     super.key,
     required this.selectedDate,
     required this.onDateSelected,
     this.children = const [],
+    this.markedDates,
+    this.markedCellBuilder,
   });
 
   @override
@@ -711,6 +725,8 @@ class _StickyPerpetualCalendarState extends State<StickyPerpetualCalendar> {
             onDateSelected: widget.onDateSelected,
             onViewDateChanged: (d) => setState(() => _viewDate = d),
             controller: _controller,
+            markedDates: widget.markedDates,
+            markedCellBuilder: widget.markedCellBuilder,
           ),
         ),
         SliverList(
@@ -727,6 +743,8 @@ class _StickyDelegate extends SliverPersistentHeaderDelegate {
   final ValueChanged<DateTime> onDateSelected;
   final ValueChanged<DateTime> onViewDateChanged;
   final PerpetualCalendarController controller;
+  final Iterable<DateTime>? markedDates;
+  final Widget Function(BuildContext context, CalendarDayData data)? markedCellBuilder;
 
   _StickyDelegate({
     required this.selectedDate,
@@ -734,6 +752,8 @@ class _StickyDelegate extends SliverPersistentHeaderDelegate {
     required this.onDateSelected,
     required this.onViewDateChanged,
     required this.controller,
+    this.markedDates,
+    this.markedCellBuilder,
   });
 
   @override
@@ -763,6 +783,8 @@ class _StickyDelegate extends SliverPersistentHeaderDelegate {
           onDateSelected: onDateSelected,
           onViewDateChanged: onViewDateChanged,
           constrainedHeight: h,
+          markedDates: markedDates,
+          markedCellBuilder: markedCellBuilder,
         ),
       ),
     );
@@ -770,7 +792,10 @@ class _StickyDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   bool shouldRebuild(covariant _StickyDelegate old) =>
-      selectedDate != old.selectedDate || viewDate != old.viewDate;
+      selectedDate != old.selectedDate ||
+      viewDate != old.viewDate ||
+      markedDates != old.markedDates ||
+      markedCellBuilder != old.markedCellBuilder;
 }
 
 /// 提高滑动灵敏度：相同手指移动距离产生更大滚动位移

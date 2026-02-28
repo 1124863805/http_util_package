@@ -24,6 +24,64 @@ class _CalendarDemoPageState extends State<CalendarDemoPage> {
     _selectedDate = DateTime.now();
   }
 
+  List<DateTime> get _markedDates {
+    final now = DateTime.now();
+    return [
+      now,
+      now.add(const Duration(days: 3)),
+      now.add(const Duration(days: 7)),
+    ];
+  }
+
+  Widget _markedCellBuilder(BuildContext context, CalendarDayData data) {
+    final theme = Theme.of(context);
+    final calTheme = CalendarTheme.of(theme.brightness);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: data.onTap,
+        borderRadius: BorderRadius.circular(cellBorderRadius),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.amber.withValues(alpha: 0.2),
+            borderRadius: BorderRadius.circular(cellBorderRadius),
+            border: data.isSelected
+                ? Border.all(
+                    color: calTheme.cellBorderSelected,
+                    width: cellBorderWidth,
+                  )
+                : null,
+          ),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  '${data.date.day}',
+                  style: TextStyle(
+                    fontSize: dayNumberFontSize,
+                    fontWeight: FontWeight.w700,
+                    color: calTheme.markerDotColor,
+                  ),
+                ),
+                if (data.subtitle.isNotEmpty)
+                  Text(
+                    data.subtitle,
+                    style: TextStyle(
+                      fontSize: subtitleFontSizeLunar,
+                      color: calTheme.subtitleColor,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _onDateChanged(DateTime date) {
     setState(() => _selectedDate = date);
     _calendarController.goToDate(date);
@@ -31,7 +89,9 @@ class _CalendarDemoPageState extends State<CalendarDemoPage> {
 
   @override
   Widget build(BuildContext context) {
-    final height = _collapsed ? calendarCollapsedHeight : calendarExpandedHeight;
+    final height = _collapsed
+        ? calendarCollapsedHeight
+        : calendarExpandedHeight;
     return Scaffold(
       appBar: AppBar(
         title: const Text('日历组件演示'),
@@ -56,6 +116,8 @@ class _CalendarDemoPageState extends State<CalendarDemoPage> {
                 selectedDate: _selectedDate,
                 onDateSelected: _onDateChanged,
                 constrainedHeight: height,
+                markedDates: _markedDates,
+                markedCellBuilder: _markedCellBuilder,
               ),
             ),
           ),
@@ -69,10 +131,7 @@ class _CollapseButton extends StatelessWidget {
   final bool collapsed;
   final VoidCallback onToggle;
 
-  const _CollapseButton({
-    required this.collapsed,
-    required this.onToggle,
-  });
+  const _CollapseButton({required this.collapsed, required this.onToggle});
 
   @override
   Widget build(BuildContext context) {

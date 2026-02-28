@@ -42,6 +42,35 @@ const int subtitleTypeFestival = 0;
 const int subtitleTypeTerm = 1;
 const int subtitleTypeLunar = 2;
 
+/// 单日格子数据：供 markedCellBuilder 自定义整个格子 UI
+class CalendarDayData {
+  final DateTime date;
+  final String subtitle;
+  final int subtitleType;
+  final bool showRest;
+  final bool showWork;
+  final bool isWeekend;
+  final bool isOtherMonth;
+  final bool isToday;
+  final bool isSelected;
+  final double selectionTransitionFactor;
+  final VoidCallback onTap;
+
+  const CalendarDayData({
+    required this.date,
+    required this.subtitle,
+    required this.subtitleType,
+    required this.showRest,
+    required this.showWork,
+    required this.isWeekend,
+    required this.isOtherMonth,
+    required this.isToday,
+    required this.isSelected,
+    required this.selectionTransitionFactor,
+    required this.onTap,
+  });
+}
+
 /// 日历主题：字体、颜色、背景
 class CalendarTheme {
   final Color dayNumberColor;
@@ -63,6 +92,7 @@ class CalendarTheme {
   final Color badgeWeekendBg;
   final Color badgeTodayBg;
   final Color badgeTextColor;
+  final Color markerDotColor;
 
   const CalendarTheme({
     required this.dayNumberColor,
@@ -84,6 +114,7 @@ class CalendarTheme {
     required this.badgeWeekendBg,
     required this.badgeTodayBg,
     required this.badgeTextColor,
+    required this.markerDotColor,
   });
 
   /// 浅色：蓝主色、休红、班蓝、周末灰，语义清晰不冲突
@@ -107,6 +138,7 @@ class CalendarTheme {
     badgeWeekendBg: Color(0xFF78909C),
     badgeTodayBg: Color(0xFF1565C0),
     badgeTextColor: Colors.white,
+    markerDotColor: Color(0xFFE57373),
   );
 
   /// 深色：低饱和、护眼
@@ -130,6 +162,7 @@ class CalendarTheme {
     badgeWeekendBg: Color(0xFF90A4AE),
     badgeTodayBg: Color(0xFF64B5F6),
     badgeTextColor: Colors.white,
+    markerDotColor: Color(0xFFE57373),
   );
 
   static CalendarTheme of(Brightness brightness) =>

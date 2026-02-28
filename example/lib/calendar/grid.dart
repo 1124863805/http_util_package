@@ -72,6 +72,8 @@ class CalendarWeekRow extends StatelessWidget {
   final double availableWidth;
   final bool showBadge;
   final double selectionTransitionFactor;
+  final Iterable<DateTime>? markedDates;
+  final Widget Function(BuildContext context, CalendarDayData data)? markedCellBuilder;
 
   const CalendarWeekRow({
     super.key,
@@ -82,9 +84,19 @@ class CalendarWeekRow extends StatelessWidget {
     required this.availableWidth,
     this.showBadge = true,
     this.selectionTransitionFactor = 1.0,
+    this.markedDates,
+    this.markedCellBuilder,
   });
 
   static const int _cols = 7;
+
+  static bool _isMarked(DateTime d, Iterable<DateTime>? marked) {
+    if (marked == null || marked.isEmpty) return false;
+    for (final m in marked) {
+      if (m.year == d.year && m.month == d.month && m.day == d.day) return true;
+    }
+    return false;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -99,27 +111,52 @@ class CalendarWeekRow extends StatelessWidget {
     final cells = <Widget>[];
     for (int i = 0; i < _cols; i++) {
       final d = weekStart.add(Duration(days: i));
-      final (subtitle, showRest, showWork, st) =
-          getCached(d.year, d.month, d.day);
-      final isOtherMonth = d.month != weekStart.month || d.year != weekStart.year;
-      cells.add(
-        CalendarDayCell(
-          year: d.year,
-          month: d.month,
-          day: d.day,
-          subtitle: subtitle,
-          subtitleType: st,
-          showRest: showRest,
-          showWork: showWork,
-          isWeekend: i == 0 || i == 6,
-          isOtherMonth: isOtherMonth,
-          isToday: now.year == d.year && now.month == d.month && now.day == d.day,
-          isSelected: isSelected(d.year, d.month, d.day),
-          showBadge: showBadge,
-          selectionTransitionFactor: selectionTransitionFactor,
-          onTap: () => onSelectDate(d),
-        ),
-      );
+      final isMarked = _isMarked(d, markedDates);
+      if (isMarked && markedCellBuilder != null) {
+        final (subtitle, showRest, showWork, st) =
+            getCached(d.year, d.month, d.day);
+        final isOtherMonth = d.month != weekStart.month || d.year != weekStart.year;
+        cells.add(
+          markedCellBuilder!(
+            context,
+            CalendarDayData(
+              date: d,
+              subtitle: subtitle,
+              subtitleType: st,
+              showRest: showRest,
+              showWork: showWork,
+              isWeekend: i == 0 || i == 6,
+              isOtherMonth: isOtherMonth,
+              isToday: now.year == d.year && now.month == d.month && now.day == d.day,
+              isSelected: isSelected(d.year, d.month, d.day),
+              selectionTransitionFactor: selectionTransitionFactor,
+              onTap: () => onSelectDate(d),
+            ),
+          ),
+        );
+      } else {
+        final (subtitle, showRest, showWork, st) =
+            getCached(d.year, d.month, d.day);
+        final isOtherMonth = d.month != weekStart.month || d.year != weekStart.year;
+        cells.add(
+          CalendarDayCell(
+            year: d.year,
+            month: d.month,
+            day: d.day,
+            subtitle: subtitle,
+            subtitleType: st,
+            showRest: showRest,
+            showWork: showWork,
+            isWeekend: i == 0 || i == 6,
+            isOtherMonth: isOtherMonth,
+            isToday: now.year == d.year && now.month == d.month && now.day == d.day,
+            isSelected: isSelected(d.year, d.month, d.day),
+            showBadge: showBadge,
+            selectionTransitionFactor: selectionTransitionFactor,
+            onTap: () => onSelectDate(d),
+          ),
+        );
+      }
     }
 
     final contentWidth = availableWidth - calendarHorizontalPadding * 2;
@@ -187,6 +224,8 @@ class CalendarMonthGrid extends StatelessWidget {
   final bool showWatermark;
   final bool showBadge;
   final double selectionTransitionFactor;
+  final Iterable<DateTime>? markedDates;
+  final Widget Function(BuildContext context, CalendarDayData data)? markedCellBuilder;
 
   const CalendarMonthGrid({
     super.key,
@@ -201,9 +240,19 @@ class CalendarMonthGrid extends StatelessWidget {
     this.showWatermark = true,
     this.showBadge = true,
     this.selectionTransitionFactor = 1.0,
+    this.markedDates,
+    this.markedCellBuilder,
   });
 
   static const int _cols = 7;
+
+  static bool _isMarked(int y, int m, int d, Iterable<DateTime>? marked) {
+    if (marked == null || marked.isEmpty) return false;
+    for (final md in marked) {
+      if (md.year == y && md.month == m && md.day == d) return true;
+    }
+    return false;
+  }
   static const int _fullRows = 6;
 
   @override
@@ -231,72 +280,141 @@ class CalendarMonthGrid extends StatelessWidget {
       final d = prevDayCount - firstWeekday + 1 + i;
       final py = prevMonth.year;
       final pm = prevMonth.month;
-      final (subtitle, showRest, showWork, st) = getCached(py, pm, d);
-      cells.add(
-        CalendarDayCell(
-          year: py,
-          month: pm,
-          day: d,
-          subtitle: subtitle,
-          subtitleType: st,
-          showRest: showRest,
-          showWork: showWork,
-          isWeekend: cellIndex % 7 == 0 || cellIndex % 7 == 6,
-          isOtherMonth: true,
-          isToday: now.year == py && now.month == pm && now.day == d,
-          isSelected: isSelected(py, pm, d),
-          showBadge: showBadge,
-          selectionTransitionFactor: selectionTransitionFactor,
-          onTap: () => onSelectDate(DateTime(py, pm, d)),
-        ),
-      );
+      final date = DateTime(py, pm, d);
+      if (_isMarked(py, pm, d, markedDates) && markedCellBuilder != null) {
+        final (subtitle, showRest, showWork, st) = getCached(py, pm, d);
+        cells.add(
+          markedCellBuilder!(
+            context,
+            CalendarDayData(
+              date: date,
+              subtitle: subtitle,
+              subtitleType: st,
+              showRest: showRest,
+              showWork: showWork,
+              isWeekend: cellIndex % 7 == 0 || cellIndex % 7 == 6,
+              isOtherMonth: true,
+              isToday: now.year == py && now.month == pm && now.day == d,
+              isSelected: isSelected(py, pm, d),
+              selectionTransitionFactor: selectionTransitionFactor,
+              onTap: () => onSelectDate(date),
+            ),
+          ),
+        );
+      } else {
+        final (subtitle, showRest, showWork, st) = getCached(py, pm, d);
+        cells.add(
+          CalendarDayCell(
+            year: py,
+            month: pm,
+            day: d,
+            subtitle: subtitle,
+            subtitleType: st,
+            showRest: showRest,
+            showWork: showWork,
+            isWeekend: cellIndex % 7 == 0 || cellIndex % 7 == 6,
+            isOtherMonth: true,
+            isToday: now.year == py && now.month == pm && now.day == d,
+            isSelected: isSelected(py, pm, d),
+            showBadge: showBadge,
+            selectionTransitionFactor: selectionTransitionFactor,
+            onTap: () => onSelectDate(date),
+          ),
+        );
+      }
       cellIndex++;
     }
     for (int d = 1; d <= dayCount; d++) {
-      final (subtitle, showRest, showWork, st) = getCached(year, month, d);
-      cells.add(
-        CalendarDayCell(
-          year: year,
-          month: month,
-          day: d,
-          subtitle: subtitle,
-          subtitleType: st,
-          showRest: showRest,
-          showWork: showWork,
-          isWeekend: cellIndex % 7 == 0 || cellIndex % 7 == 6,
-          isOtherMonth: false,
-          isToday: now.year == year && now.month == month && now.day == d,
-          isSelected: isSelected(year, month, d),
-          showBadge: showBadge,
-          selectionTransitionFactor: selectionTransitionFactor,
-          onTap: () => onSelectDate(DateTime(year, month, d)),
-        ),
-      );
+      final date = DateTime(year, month, d);
+      if (_isMarked(year, month, d, markedDates) && markedCellBuilder != null) {
+        final (subtitle, showRest, showWork, st) = getCached(year, month, d);
+        cells.add(
+          markedCellBuilder!(
+            context,
+            CalendarDayData(
+              date: date,
+              subtitle: subtitle,
+              subtitleType: st,
+              showRest: showRest,
+              showWork: showWork,
+              isWeekend: cellIndex % 7 == 0 || cellIndex % 7 == 6,
+              isOtherMonth: false,
+              isToday: now.year == year && now.month == month && now.day == d,
+              isSelected: isSelected(year, month, d),
+              selectionTransitionFactor: selectionTransitionFactor,
+              onTap: () => onSelectDate(date),
+            ),
+          ),
+        );
+      } else {
+        final (subtitle, showRest, showWork, st) = getCached(year, month, d);
+        cells.add(
+          CalendarDayCell(
+            year: year,
+            month: month,
+            day: d,
+            subtitle: subtitle,
+            subtitleType: st,
+            showRest: showRest,
+            showWork: showWork,
+            isWeekend: cellIndex % 7 == 0 || cellIndex % 7 == 6,
+            isOtherMonth: false,
+            isToday: now.year == year && now.month == month && now.day == d,
+            isSelected: isSelected(year, month, d),
+            showBadge: showBadge,
+            selectionTransitionFactor: selectionTransitionFactor,
+            onTap: () => onSelectDate(date),
+          ),
+        );
+      }
       cellIndex++;
     }
     final nextCount = _cols * _fullRows - firstWeekday - dayCount;
     for (int d = 1; d <= nextCount; d++) {
       final ny = nextMonth.year;
       final nm = nextMonth.month;
-      final (subtitle, showRest, showWork, st) = getCached(ny, nm, d);
-      cells.add(
-        CalendarDayCell(
-          year: ny,
-          month: nm,
-          day: d,
-          subtitle: subtitle,
-          subtitleType: st,
-          showRest: showRest,
-          showWork: showWork,
-          isWeekend: cellIndex % 7 == 0 || cellIndex % 7 == 6,
-          isOtherMonth: true,
-          isToday: now.year == ny && now.month == nm && now.day == d,
-          isSelected: isSelected(ny, nm, d),
-          showBadge: showBadge,
-          selectionTransitionFactor: selectionTransitionFactor,
-          onTap: () => onSelectDate(DateTime(ny, nm, d)),
-        ),
-      );
+      final date = DateTime(ny, nm, d);
+      if (_isMarked(ny, nm, d, markedDates) && markedCellBuilder != null) {
+        final (subtitle, showRest, showWork, st) = getCached(ny, nm, d);
+        cells.add(
+          markedCellBuilder!(
+            context,
+            CalendarDayData(
+              date: date,
+              subtitle: subtitle,
+              subtitleType: st,
+              showRest: showRest,
+              showWork: showWork,
+              isWeekend: cellIndex % 7 == 0 || cellIndex % 7 == 6,
+              isOtherMonth: true,
+              isToday: now.year == ny && now.month == nm && now.day == d,
+              isSelected: isSelected(ny, nm, d),
+              selectionTransitionFactor: selectionTransitionFactor,
+              onTap: () => onSelectDate(date),
+            ),
+          ),
+        );
+      } else {
+        final (subtitle, showRest, showWork, st) = getCached(ny, nm, d);
+        cells.add(
+          CalendarDayCell(
+            year: ny,
+            month: nm,
+            day: d,
+            subtitle: subtitle,
+            subtitleType: st,
+            showRest: showRest,
+            showWork: showWork,
+            isWeekend: cellIndex % 7 == 0 || cellIndex % 7 == 6,
+            isOtherMonth: true,
+            isToday: now.year == ny && now.month == nm && now.day == d,
+            isSelected: isSelected(ny, nm, d),
+            showBadge: showBadge,
+            selectionTransitionFactor: selectionTransitionFactor,
+            onTap: () => onSelectDate(date),
+          ),
+        );
+      }
       cellIndex++;
     }
 
