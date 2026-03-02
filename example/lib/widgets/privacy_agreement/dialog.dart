@@ -1,6 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:webview_flutter/webview_flutter.dart';
+
+import 'webview_page.dart';
 
 /// 隐私协议弹窗配置
 class PrivacyAgreementConfig {
@@ -163,45 +164,6 @@ class PrivacyAgreementDialog extends StatelessWidget {
   }
 
   void _openUrl(BuildContext context, String url, String title) {
-    if (!context.mounted) return;
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => _AgreementWebViewPage(url: url, title: title),
-      ),
-    );
-  }
-}
-
-class _AgreementWebViewPage extends StatefulWidget {
-  const _AgreementWebViewPage({required this.url, required this.title});
-  final String url;
-  final String title;
-
-  @override
-  State<_AgreementWebViewPage> createState() => _AgreementWebViewPageState();
-}
-
-class _AgreementWebViewPageState extends State<_AgreementWebViewPage> {
-  late final WebViewController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..loadRequest(Uri.parse(widget.url));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.title),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        elevation: 0,
-      ),
-      body: WebViewWidget(controller: _controller),
-    );
+    AgreementWebViewPage.open(context, url: url, title: title);
   }
 }
