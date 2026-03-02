@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../tyme4/tyme.dart';
+import '../chinese_calendar/tyme.dart';
 import 'constants.dart';
 import 'cell.dart';
 

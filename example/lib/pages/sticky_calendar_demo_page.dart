@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../calendar/calendar.dart';
-import '../calendar/constants.dart';
+import '../widgets/calendar/calendar.dart';
+import '../widgets/calendar/constants.dart';
 
 /// 吸顶日历演示：滑动吸顶、自动收起为周视图
 class StickyCalendarDemoPage extends StatefulWidget {

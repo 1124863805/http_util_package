@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/privacy_agreement/privacy_agreement.dart';
 import 'http_demo_page.dart';
 import 'calendar_demo_page.dart';
 import 'sticky_calendar_demo_page.dart';
@@ -57,6 +58,27 @@ class HomePage extends StatelessWidget {
               context,
               MaterialPageRoute(builder: (_) => const HuangliAlmanacPage()),
             ),
+          ),
+          const SizedBox(height: 12),
+          _DemoCard(
+            icon: Icons.privacy_tip_outlined,
+            title: '隐私协议弹窗',
+            subtitle: '点击演示弹窗样式',
+            onTap: () async {
+              await PrivacyAgreementHelper.clearAgreed();
+              if (!context.mounted) return;
+              final agreed = await PrivacyAgreementHelper.showIfNeeded(
+                context,
+                config: const PrivacyAgreementConfig(
+                  userAgreementUrl: 'https://download.laibuyi.com/agreement.html',
+                  privacyPolicyUrl: 'https://download.laibuyi.com/privacy.html',
+                ),
+              );
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(agreed ? '已同意' : '已拒绝')),
+              );
+            },
           ),
         ],
       ),

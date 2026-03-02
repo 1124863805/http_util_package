@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../tyme4/tyme.dart';
+import '../widgets/chinese_calendar/tyme.dart';
 
 /// 传统黄历页面：纸质黄历风格，宜忌冲煞神方位
 class HuangliAlmanacPage extends StatefulWidget {

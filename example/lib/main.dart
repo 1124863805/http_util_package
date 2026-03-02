@@ -2,23 +2,34 @@ import 'package:flutter/material.dart';
 import 'package:dio_http_util/http_util.dart';
 
 import 'pages/home_page.dart';
+import 'widgets/privacy_agreement/privacy_agreement.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  HttpUtil.configure(
-    HttpConfig(
-      baseUrl: 'https://httpbin.org',
-      responseParser: _DemoResponseParser(),
-      enableLogging: true,
-      contextGetter: () => navigatorKey.currentContext,
-      onFailure: (httpStatusCode, errorCode, message) {
-        debugPrint('请求失败: $message');
+  runApp(
+    PrivacyGate(
+      config: const PrivacyAgreementConfig(
+        userAgreementUrl: 'https://download.laibuyi.com/agreement.html',
+        privacyPolicyUrl: 'https://download.laibuyi.com/privacy.html',
+      ),
+      onAgreed: () async {
+        HttpUtil.configure(
+          HttpConfig(
+            baseUrl: 'https://httpbin.org',
+            responseParser: _DemoResponseParser(),
+            enableLogging: true,
+            contextGetter: () => navigatorKey.currentContext,
+            onFailure: (httpStatusCode, errorCode, message) {
+              debugPrint('请求失败: $message');
+            },
+          ),
+        );
       },
+      child: const MyApp(),
     ),
   );
-  runApp(const MyApp());
 }
 
 /// Demo parser: 2xx as success, body as data
