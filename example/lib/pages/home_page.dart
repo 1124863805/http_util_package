@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'http_demo_page.dart';
 import 'calendar_demo_page.dart';
 import 'sticky_calendar_demo_page.dart';
+import 'huangli_almanac_page.dart';
 
 /// 首页：演示入口
 class HomePage extends StatelessWidget {
@@ -45,6 +46,16 @@ class HomePage extends StatelessWidget {
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const StickyCalendarDemoPage()),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _DemoCard(
+            icon: Icons.menu_book,
+            title: '老黄历',
+            subtitle: '传统纸质黄历风格、宜忌冲煞神方位',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const HuangliAlmanacPage()),
             ),
           ),
         ],
