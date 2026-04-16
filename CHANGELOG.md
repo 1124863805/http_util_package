@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-04-16
+
+### Added
+- 隐私协议模块：`PrivacyGate`、`PrivacyAgreementDialog`、`PrivacyAgreementHelper`、`AgreementWebViewPage` 等，由 `http_util.dart` 统一导出
+- 新增依赖：`shared_preferences`、`webview_flutter`
+
+### Changed
+- `PrivacyGate`：用户曾同意隐私时，冷启动优先展示主应用，`onAgreed` 在首帧绘制之后异步执行，避免初始化拖慢启动
+
 ## [1.5.1] - 2026-01-15
 
 ### 改进
