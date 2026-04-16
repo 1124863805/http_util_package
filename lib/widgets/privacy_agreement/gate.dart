@@ -7,7 +7,11 @@ import 'dialog.dart';
 import 'helper.dart';
 
 /// 隐私协议门控：未同意前不构建 [child]。
-/// 已同意过则尽快展示 [child]，[onAgreed] 在首帧之后异步执行，不阻塞冷启动。
+///
+/// **已同意过**：先 `await` [onAgreed]（注册 GetX、初始化 HTTP 等），再展示 [child]，
+/// 避免主应用首帧内 `Get.find` 早于 `onAgreed` 执行。
+///
+/// **首次同意**：弹窗内点接受后 `await` [onAgreed]，再展示 [child]。
 class PrivacyGate extends StatefulWidget {
   const PrivacyGate({
     super.key,
@@ -23,7 +27,7 @@ class PrivacyGate extends StatefulWidget {
   /// 协议弹窗配置
   final PrivacyAgreementConfig config;
 
-  /// 用户同意后执行，用于 SDK 初始化、权限请求等
+  /// 用户同意后执行，用于 SDK 初始化、权限请求等（须在首帧构建 [child] 前完成）
   final Future<void> Function()? onAgreed;
 
   /// 弹窗阶段的主题（可选，默认使用 ColorScheme.fromSeed）
@@ -43,12 +47,9 @@ class _PrivacyGateState extends State<PrivacyGate> {
   Future<void> _onGateComplete(BuildContext gateContext) async {
     if (await PrivacyAgreementHelper.hasAgreed()) {
       if (!mounted) return;
+      await _runOnAgreed();
+      if (!mounted) return;
       setState(() => _agreed = true);
-      // 已同意：先展示主应用，再在首帧之后异步执行 [onAgreed]，避免冷启动被初始化拖慢
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        unawaited(_runOnAgreed());
-      });
       return;
     }
     final agreed = await PrivacyAgreementHelper.show(

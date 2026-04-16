@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.1] - 2026-04-16
+
+### Fixed
+- `PrivacyGate`：已同意隐私时改为先 `await onAgreed` 再 `setState` 展示 [child]，避免主应用 Binding 首帧 `Get.find` 早于 `Get.put`（与首次同意弹窗路径顺序一致）
+
 ## [1.6.0] - 2026-04-16
 
 ### Added
@@ -12,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 新增依赖：`shared_preferences`、`webview_flutter`
 
 ### Changed
-- `PrivacyGate`：用户曾同意隐私时，冷启动优先展示主应用，`onAgreed` 在首帧绘制之后异步执行，避免初始化拖慢启动
+- `PrivacyGate`：用户曾同意隐私时，冷启动优先展示主应用，`onAgreed` 在首帧绘制之后异步执行，避免初始化拖慢启动（1.6.1 已调整为先执行 `onAgreed` 再展示子应用，见上）
 
 ## [1.5.1] - 2026-01-15
 
