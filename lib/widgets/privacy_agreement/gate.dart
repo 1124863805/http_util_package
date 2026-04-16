@@ -1,10 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'dialog.dart';
 import 'helper.dart';
 
-/// 隐私协议门控：同意前不构建 [child]、不执行 [onAgreed]
+/// 隐私协议门控：未同意前不构建 [child]。
+/// 已同意过则尽快展示 [child]，[onAgreed] 在首帧之后异步执行，不阻塞冷启动。
 class PrivacyGate extends StatefulWidget {
   const PrivacyGate({
     super.key,
@@ -32,28 +35,36 @@ class PrivacyGate extends StatefulWidget {
 
 class _PrivacyGateState extends State<PrivacyGate> {
   bool _agreed = false;
-  bool _initializing = true;
 
   Future<void> _runOnAgreed() async {
-    if (mounted) setState(() => _initializing = true);
     await widget.onAgreed?.call();
-    if (mounted) setState(() => _initializing = false);
   }
 
   Future<void> _onGateComplete(BuildContext gateContext) async {
     if (await PrivacyAgreementHelper.hasAgreed()) {
-      await _runOnAgreed();
-      if (mounted) setState(() => _agreed = true);
+      if (!mounted) return;
+      setState(() => _agreed = true);
+      // 已同意：先展示主应用，再在首帧之后异步执行 [onAgreed]，避免冷启动被初始化拖慢
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(_runOnAgreed());
+      });
       return;
     }
-    final agreed = await PrivacyAgreementHelper.show(gateContext, config: widget.config);
+    final agreed = await PrivacyAgreementHelper.show(
+      gateContext,
+      config: widget.config.copyWith(
+        onAccept: () async {
+          await PrivacyAgreementHelper.markAgreed();
+          await widget.onAgreed?.call();
+        },
+      ),
+    );
     if (!gateContext.mounted) return;
     if (agreed != true) {
       SystemNavigator.pop();
       return;
     }
-    await PrivacyAgreementHelper.markAgreed();
-    await _runOnAgreed();
     if (mounted) setState(() => _agreed = true);
   }
 
@@ -66,7 +77,6 @@ class _PrivacyGateState extends State<PrivacyGate> {
     return MaterialApp(
       theme: theme,
       home: _GateScaffold(
-        initializing: _initializing,
         onBuild: (gateContext) {
           WidgetsBinding.instance.addPostFrameCallback(
             (_) => _onGateComplete(gateContext),
@@ -79,11 +89,9 @@ class _PrivacyGateState extends State<PrivacyGate> {
 
 class _GateScaffold extends StatefulWidget {
   const _GateScaffold({
-    required this.initializing,
     required this.onBuild,
   });
 
-  final bool initializing;
   final void Function(BuildContext context) onBuild;
 
   @override
@@ -99,12 +107,8 @@ class _GateScaffoldState extends State<_GateScaffold> {
       _called = true;
       widget.onBuild(context);
     }
-    return Scaffold(
-      body: Center(
-        child: widget.initializing
-            ? const CircularProgressIndicator()
-            : const SizedBox.shrink(),
-      ),
+    return const Scaffold(
+      body: SizedBox.shrink(),
     );
   }
 }

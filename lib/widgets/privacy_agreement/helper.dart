@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'dialog.dart';
-
-const _kAgreedKey = 'privacy_agreement_agreed';
+import 'privacy_prefs.dart';
 
 /// 隐私协议辅助类
 ///
@@ -11,29 +9,14 @@ const _kAgreedKey = 'privacy_agreement_agreed';
 class PrivacyAgreementHelper {
   PrivacyAgreementHelper._();
 
-  static SharedPreferences? _prefs;
-
-  static Future<void> _ensurePrefs() async {
-    _prefs ??= await SharedPreferences.getInstance();
-  }
-
   /// 是否已同意过协议
-  static Future<bool> hasAgreed() async {
-    await _ensurePrefs();
-    return _prefs!.getBool(_kAgreedKey) ?? false;
-  }
+  static Future<bool> hasAgreed() => PrivacyPrefs.hasAgreed();
 
   /// 标记为已同意（用于 PrivacyGate 等场景，弹窗同意后持久化）
-  static Future<void> markAgreed() async {
-    await _ensurePrefs();
-    await _prefs!.setBool(_kAgreedKey, true);
-  }
+  static Future<void> markAgreed() => PrivacyPrefs.markAgreed();
 
   /// 清除同意状态（用于测试或重新展示）
-  static Future<void> clearAgreed() async {
-    await _ensurePrefs();
-    await _prefs!.remove(_kAgreedKey);
-  }
+  static Future<void> clearAgreed() => PrivacyPrefs.clearAgreed();
 
   /// 弹出协议弹窗，返回用户选择（true 同意 / false 拒绝 / null 关闭）
   static Future<bool?> show(
@@ -57,7 +40,6 @@ class PrivacyAgreementHelper {
   }) async {
     if (await hasAgreed()) return true;
     final agreed = await show(context, config: config);
-    if (agreed == true) await markAgreed();
     return agreed ?? false;
   }
 }

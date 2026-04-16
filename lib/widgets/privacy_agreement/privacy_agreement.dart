@@ -2,7 +2,7 @@
 ///
 /// 统一导出，使用方式：
 /// ```dart
-/// import 'package:example/widgets/privacy_agreement/privacy_agreement.dart';
+/// import 'package:dio_http_util/http_util.dart';
 /// ```
 library;
 

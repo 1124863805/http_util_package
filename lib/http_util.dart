@@ -15,5 +15,6 @@ export 'sse/sse_connection.dart'; // SSE 连接封装（自动管理订阅）
 export 'sse/sse_manager.dart'; // SSE 连接管理器（多连接管理）
 export 'request_deduplicator.dart'; // 请求去重/防抖管理器
 export 'request_queue.dart'; // 请求队列管理器
+export 'widgets/privacy_agreement/privacy_agreement.dart'; // 隐私协议门控与弹窗
 
 // 不导出 Dio，调用方仅依赖本包的 RawHttpResponse / Response 等类型

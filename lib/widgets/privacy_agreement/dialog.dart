@@ -1,6 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
+import 'privacy_prefs.dart';
 import 'webview_page.dart';
 
 /// 隐私协议弹窗配置
@@ -15,6 +16,7 @@ class PrivacyAgreementConfig {
     this.privacyPolicyUrl,
     this.acceptText = '同意',
     this.rejectText = '不同意',
+    this.onAccept,
   });
 
   final String title;
@@ -23,10 +25,34 @@ class PrivacyAgreementConfig {
   final String? privacyPolicyUrl;
   final String acceptText;
   final String rejectText;
+
+  /// 点击「同意」后执行；完成后关闭弹窗并返回 true。
+  /// 为 null 时默认 [PrivacyPrefs.markAgreed]。
+  final Future<void> Function()? onAccept;
+
+  PrivacyAgreementConfig copyWith({
+    String? title,
+    String? content,
+    String? userAgreementUrl,
+    String? privacyPolicyUrl,
+    String? acceptText,
+    String? rejectText,
+    Future<void> Function()? onAccept,
+  }) {
+    return PrivacyAgreementConfig(
+      title: title ?? this.title,
+      content: content ?? this.content,
+      userAgreementUrl: userAgreementUrl ?? this.userAgreementUrl,
+      privacyPolicyUrl: privacyPolicyUrl ?? this.privacyPolicyUrl,
+      acceptText: acceptText ?? this.acceptText,
+      rejectText: rejectText ?? this.rejectText,
+      onAccept: onAccept ?? this.onAccept,
+    );
+  }
 }
 
 /// 隐私协议弹窗
-class PrivacyAgreementDialog extends StatelessWidget {
+class PrivacyAgreementDialog extends StatefulWidget {
   const PrivacyAgreementDialog({
     super.key,
     this.config = const PrivacyAgreementConfig(),
@@ -34,6 +60,11 @@ class PrivacyAgreementDialog extends StatelessWidget {
 
   final PrivacyAgreementConfig config;
 
+  @override
+  State<PrivacyAgreementDialog> createState() => _PrivacyAgreementDialogState();
+}
+
+class _PrivacyAgreementDialogState extends State<PrivacyAgreementDialog> {
   static const TextStyle _baseStyle = TextStyle(
     height: 1.65,
     fontSize: 15,
@@ -47,10 +78,26 @@ class PrivacyAgreementDialog extends StatelessWidget {
     letterSpacing: 0.2,
   );
 
+  bool _accepting = false;
+
+  Future<void> _onAccept() async {
+    if (_accepting) return;
+    setState(() => _accepting = true);
+    try {
+      final fn = widget.config.onAccept ?? PrivacyPrefs.markAgreed;
+      await fn();
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } catch (_) {
+      if (mounted) setState(() => _accepting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final config = widget.config;
 
     return Dialog(
       backgroundColor: Colors.white,
@@ -86,7 +133,7 @@ class PrivacyAgreementDialog extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               FilledButton(
-                onPressed: () => Navigator.of(context).pop(true),
+                onPressed: _accepting ? null : _onAccept,
                 style: FilledButton.styleFrom(
                   backgroundColor: colorScheme.primary,
                   foregroundColor: colorScheme.onPrimary,
@@ -95,11 +142,20 @@ class PrivacyAgreementDialog extends StatelessWidget {
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
-                child: Text(config.acceptText),
+                child: _accepting
+                    ? SizedBox(
+                        height: 22,
+                        width: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: colorScheme.onPrimary,
+                        ),
+                      )
+                    : Text(config.acceptText),
               ),
               const SizedBox(height: 10),
               FilledButton(
-                onPressed: () => Navigator.of(context).pop(false),
+                onPressed: _accepting ? null : () => Navigator.of(context).pop(false),
                 style: FilledButton.styleFrom(
                   backgroundColor: Colors.grey.shade200,
                   foregroundColor: Colors.black87,
@@ -118,13 +174,14 @@ class PrivacyAgreementDialog extends StatelessWidget {
   }
 
   List<InlineSpan> _buildContentSpans(BuildContext context) {
-    final content = config.content;
+    final content = widget.config.content;
     final spans = <InlineSpan>[];
     int lastEnd = 0;
 
-    final userPattern = '《用户协议》';
-    final privacyPattern = '《隐私政策》';
+    const userPattern = '《用户协议》';
+    const privacyPattern = '《隐私政策》';
     final regex = RegExp('($userPattern|$privacyPattern)');
+    final cfg = widget.config;
 
     for (final match in regex.allMatches(content)) {
       spans.add(
@@ -134,24 +191,24 @@ class PrivacyAgreementDialog extends StatelessWidget {
         ),
       );
       final text = match.group(1)!;
-      if (text == userPattern && config.userAgreementUrl != null) {
+      if (text == userPattern && cfg.userAgreementUrl != null) {
         spans.add(
           TextSpan(
             text: text,
             style: _linkStyle,
             recognizer: TapGestureRecognizer()
               ..onTap = () =>
-                  _openUrl(context, config.userAgreementUrl!, '用户协议'),
+                  _openUrl(context, cfg.userAgreementUrl!, '用户协议'),
           ),
         );
-      } else if (text == privacyPattern && config.privacyPolicyUrl != null) {
+      } else if (text == privacyPattern && cfg.privacyPolicyUrl != null) {
         spans.add(
           TextSpan(
             text: text,
             style: _linkStyle,
             recognizer: TapGestureRecognizer()
               ..onTap = () =>
-                  _openUrl(context, config.privacyPolicyUrl!, '隐私政策'),
+                  _openUrl(context, cfg.privacyPolicyUrl!, '隐私政策'),
           ),
         );
       } else {

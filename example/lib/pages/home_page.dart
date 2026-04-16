@@ -1,6 +1,5 @@
+import 'package:dio_http_util/http_util.dart';
 import 'package:flutter/material.dart';
-
-import '../widgets/privacy_agreement/privacy_agreement.dart';
 import 'http_demo_page.dart';
 import 'calendar_demo_page.dart';
 import 'sticky_calendar_demo_page.dart';
