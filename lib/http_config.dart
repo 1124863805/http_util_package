@@ -201,6 +201,18 @@ class HttpConfig {
   /// - 未走刷新（如 path 在 [UnauthorizedRetryConfig.excludedPathPrefixes] 内）的 401，仍按原逻辑走 [on401Unauthorized] 等。
   final UnauthorizedRetryConfig? unauthorizedRetry;
 
+  /// 为 `true` 时，Dio 不设置接收超时（`receiveTimeout: null`），等待响应体不设上限。
+  ///
+  /// 适用于本地调试、慢代理或生成类接口；连接/发送仍使用 [connectTimeout] / [sendTimeout]。
+  /// 默认 `false`（接收超时 30s，与历史行为一致）。
+  final bool disableReceiveTimeout;
+
+  /// TCP 连接超时；`null` 表示交给 Dio 默认。
+  final Duration? connectTimeout;
+
+  /// 发送超时；`null` 表示交给 Dio 默认。
+  final Duration? sendTimeout;
+
   /// 服务 baseUrl 映射（可选）
   /// key: 服务名称（如 'files', 'cdn'），value: 对应的 baseUrl
   ///
@@ -249,6 +261,9 @@ class HttpConfig {
     this.queueConfig,
     this.serviceBaseUrls,
     this.unauthorizedRetry,
+    this.disableReceiveTimeout = false,
+    this.connectTimeout,
+    this.sendTimeout,
   }) : responseParser = responseParser ?? StandardResponseParser();
 }
 

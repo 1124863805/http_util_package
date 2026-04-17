@@ -130,11 +130,14 @@ class HttpUtil {
       // 再次检查，防止在检查后、赋值前配置被修改（虽然不太可能）
       if (_dioInstance == null) {
         _dioInstance = dio_package.Dio();
+        final cfg = _config!;
         _dioInstance!.options = dio_package.BaseOptions(
-          baseUrl: _config!.baseUrl,
-          connectTimeout: const Duration(seconds: 30),
-          receiveTimeout: const Duration(seconds: 30),
-          sendTimeout: const Duration(seconds: 30),
+          baseUrl: cfg.baseUrl,
+          connectTimeout:
+              cfg.connectTimeout ?? const Duration(seconds: 30),
+          receiveTimeout:
+              cfg.disableReceiveTimeout ? null : const Duration(seconds: 30),
+          sendTimeout: cfg.sendTimeout ?? const Duration(seconds: 30),
           // 所有状态码都认为是有效的，不自动抛出异常
           validateStatus: (status) => true,
         );
@@ -309,9 +312,13 @@ class HttpUtil {
     final newDio = dio_package.Dio();
     newDio.options = dio_package.BaseOptions(
       baseUrl: baseUrl,
-      connectTimeout: const Duration(seconds: 30),
-      receiveTimeout: const Duration(seconds: 30),
-      sendTimeout: const Duration(seconds: 30),
+      connectTimeout: currentConfig?.connectTimeout ??
+          const Duration(seconds: 30),
+      receiveTimeout: currentConfig?.disableReceiveTimeout == true
+          ? null
+          : const Duration(seconds: 30),
+      sendTimeout:
+          currentConfig?.sendTimeout ?? const Duration(seconds: 30),
       validateStatus: (status) => true,
     );
 
