@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'response_parser.dart';
 import 'parsers/standard_response_parser.dart';
 import 'request_deduplicator.dart';
+import 'unauthorized_retry_config.dart';
 
 /// 日志打印模式
 enum LogMode {
@@ -69,6 +70,9 @@ class HttpConfig {
   /// 只会调用一次此回调，避免并发请求时重复处理。
   /// 
   /// 如果设置了此回调，401 错误将优先使用此回调，不再调用 [onFailure]。
+  ///
+  /// 若同时配置了 [unauthorizedRetry]，且本次请求因刷新返回 `false` 已调用
+  /// [UnauthorizedRetryConfig.onRefreshFailed]，则**不会**再调用本回调（避免与 [onRefreshFailed] 重复跳转/提示）。
   /// 
   /// 示例：
   /// ```dart
@@ -91,6 +95,8 @@ class HttpConfig {
   /// 注意：
   /// - 如果用户使用了链式调用的 onFailure，此回调不会被调用（优先级：链式调用的 onFailure > 全局的 onFailure）
   /// - 如果设置了 [on401Unauthorized]，401 错误不会调用此回调
+  /// - 若 [unauthorizedRetry] 已触发 [UnauthorizedRetryConfig.onRefreshFailed]，则本次「未授权形态」响应
+  ///   不再调用本全局回调（避免与 [onRefreshFailed] 重复）；链式 onFailure 仍会先执行（若存在）
   /// 
   /// 示例：
   /// ```dart
@@ -186,6 +192,15 @@ class HttpConfig {
   /// ```
   final QueueConfig? queueConfig;
 
+  /// 会话过期时自动 [UnauthorizedRetryConfig.refreshAccessToken] 并重试（在 [send] 内部完成，业务无感）。
+  ///
+  /// 与 [on401Unauthorized] / 全局 [onFailure] 的协调：
+  /// - 刷新成功并重试后若 `isSuccess`，不会进入错误回调。
+  /// - 若 [UnauthorizedRetryConfig.refreshAccessToken] 返回 `false` 且已调用 [UnauthorizedRetryConfig.onRefreshFailed]，
+  ///   则本次**不会**再派发 [on401Unauthorized] 与全局 [onFailure]（与「未授权形态」一致时），避免重复处理。
+  /// - 未走刷新（如 path 在 [UnauthorizedRetryConfig.excludedPathPrefixes] 内）的 401，仍按原逻辑走 [on401Unauthorized] 等。
+  final UnauthorizedRetryConfig? unauthorizedRetry;
+
   /// 服务 baseUrl 映射（可选）
   /// key: 服务名称（如 'files', 'cdn'），value: 对应的 baseUrl
   ///
@@ -233,6 +248,7 @@ class HttpConfig {
     this.deduplicationConfig,
     this.queueConfig,
     this.serviceBaseUrls,
+    this.unauthorizedRetry,
   }) : responseParser = responseParser ?? StandardResponseParser();
 }
 

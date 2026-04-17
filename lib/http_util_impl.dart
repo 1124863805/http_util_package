@@ -20,9 +20,39 @@ import 'sse/sse_manager.dart';
 import 'widgets/loading_widget.dart';
 import 'request_deduplicator.dart';
 import 'request_queue.dart';
+import 'unauthorized_retry_config.dart';
 
 /// 供 [compute] 使用的顶层 JSON 解码函数（避免在主 isolate 解析大 JSON 导致 UI 卡顿）
 dynamic _decodeJsonInIsolate(String s) => jsonDecode(s);
+
+bool _unauthorizedRetryExcluded(String path, UnauthorizedRetryConfig c) {
+  for (final p in c.excludedPathPrefixes) {
+    if (path.startsWith(p)) return true;
+  }
+  return false;
+}
+
+bool _needsUnauthorizedRetry<T>(Response<T> response, UnauthorizedRetryConfig c) {
+  if (response.isSuccess) return false;
+  final http = response.httpStatusCode ?? 0;
+  if (http == 401) return true;
+  final want = c.sessionExpiredBusinessCode;
+  if (want == null) return false;
+  return response.errorCode == want;
+}
+
+/// 与 [_needsUnauthorizedRetry] 一致：用于判断「未授权形态」，以便在 [UnauthorizedRetryConfig.onRefreshFailed] 已执行后
+/// 跳过 [HttpConfig.on401Unauthorized] / 全局 [HttpConfig.onFailure]，避免与原有 401 处理重复。
+bool _isUnauthorizedResponseShape<T>(
+  Response<T> response,
+  UnauthorizedRetryConfig c,
+) {
+  if (response.isSuccess) return false;
+  final http = response.httpStatusCode ?? 0;
+  if (http == 401) return true;
+  final want = c.sessionExpiredBusinessCode;
+  return want != null && response.errorCode == want;
+}
 
 /// HTTP 请求工具类
 /// 基于 Dio 封装，支持配置化的请求头注入
@@ -595,7 +625,6 @@ extension HttpUtilSafeCall on HttpUtil {
       }
 
       try {
-        // 解析 baseUrl
         final resolvedBaseUrl =
             HttpUtilSafeCall._resolveBaseUrl(baseUrl, service);
 
@@ -604,45 +633,55 @@ extension HttpUtilSafeCall on HttpUtil {
           throw StateError('HttpUtil 未配置，请先调用 HttpUtil.configure() 进行配置');
         }
 
-        // 构建请求选项（responseType.plain 拿原始字符串，再在 isolate 中 decode 避免 UI 卡顿）
-        final options = dio_package.Options(
-          headers: headers ?? const {},
-          responseType: dio_package.ResponseType.plain,
-        );
-
-        // 直接调用 request 方法获取原始 response
-        final rawResponse = await HttpUtil.instance.request<T>(
-          method: method,
-          path: path,
-          data: data,
-          queryParameters: queryParameters,
-          options: options,
-          baseUrl: resolvedBaseUrl,
-        );
-
-        // 检查 500 错误
-        if (rawResponse.statusCode == 500) {
-          return _handleNetworkError<T>();
+        Future<Response<T>> fetchAndParse() async {
+          final options = dio_package.Options(
+            headers: headers ?? const {},
+            responseType: dio_package.ResponseType.plain,
+          );
+          final rawResponse = await HttpUtil.instance.request<T>(
+            method: method,
+            path: path,
+            data: data,
+            queryParameters: queryParameters,
+            options: options,
+            baseUrl: resolvedBaseUrl,
+          );
+          if (rawResponse.statusCode == 500) {
+            return _handleNetworkError<T>();
+          }
+          dynamic responseData = rawResponse.data;
+          if (responseData is String) {
+            try {
+              responseData =
+                  await compute<String, dynamic>(_decodeJsonInIsolate, responseData);
+            } catch (_) {}
+          }
+          final raw = RawHttpResponse(
+            statusCode: rawResponse.statusCode,
+            data: responseData,
+            path: rawResponse.requestOptions.path,
+          );
+          return config.responseParser.parse<T>(raw);
         }
 
-        // 在 isolate 中解码 JSON，避免主线程解析大 JSON 导致 UI 卡顿
-        dynamic responseData = rawResponse.data;
-        if (responseData is String) {
-          try {
-            responseData = await compute<String, dynamic>(_decodeJsonInIsolate, responseData);
-          } catch (_) {
-            // 解码失败保持原样，由解析器返回格式错误
+        var response = await fetchAndParse();
+        final ur = config.unauthorizedRetry;
+        var unauthorizedRetryRefreshFailed = false;
+        if (ur != null && !response.isSuccess) {
+          for (var attempt = 0; attempt < ur.maxRetries; attempt++) {
+            if (_unauthorizedRetryExcluded(path, ur)) break;
+            if (!_needsUnauthorizedRetry(response, ur)) break;
+            final ok = await ur.refreshAccessToken();
+            if (!ok) {
+              await ur.onRefreshFailed?.call();
+              unauthorizedRetryRefreshFailed = true;
+              break;
+            }
+            response = await fetchAndParse();
+            if (response.isSuccess) break;
           }
         }
 
-        final raw = RawHttpResponse(
-          statusCode: rawResponse.statusCode,
-          data: responseData,
-          path: rawResponse.requestOptions.path,
-        );
-        final response = config.responseParser.parse<T>(raw);
-
-        // 自动处理错误（如果用户实现了 handleError 方法）
         if (!response.isSuccess) {
           response.handleError();
 
@@ -650,32 +689,31 @@ extension HttpUtilSafeCall on HttpUtil {
           // 优先级：链式调用的 onFailure > on401Unauthorized > 全局的 onFailure
           final errorMessage = response.errorMessage;
           if (errorMessage != null) {
-            final httpStatusCode = response.httpStatusCode; // 获取 HTTP 状态码
-            final errorCode = response.errorCode; // 获取业务错误码
+            final httpStatusCode = response.httpStatusCode;
+            final errorCode = response.errorCode;
+            final suppressLegacyAuthCallbacks = unauthorizedRetryRefreshFailed &&
+                ur != null &&
+                _isUnauthorizedResponseShape(response, ur);
             Future.microtask(() {
-              // 再次检查 errorHandled，如果链式调用的 onFailure 已经处理了，就不调用其他错误处理
               if (!response.errorHandled) {
-                // 优先级 1：send 的 onFailure（请求级别的错误处理）
                 if (onFailure != null) {
                   onFailure(httpStatusCode, errorCode, errorMessage);
-                  // 通过调用 response.onFailure 来标记错误已处理（传入空回调，只用于标记）
-                  // 这样可以复用现有的标记逻辑，避免直接访问私有方法
                   response.onFailure((_, __, ___) {});
                   return;
                 }
 
-                // 优先级 2：401 且设置了 on401Unauthorized
+                if (suppressLegacyAuthCallbacks) {
+                  return;
+                }
+
                 if (httpStatusCode == 401 && config.on401Unauthorized != null) {
-                  // 检查是否需要去重
                   if (HttpUtilSafeCall._shouldHandleError(
                       401, config.errorDeduplicationWindow)) {
                     config.on401Unauthorized!();
                   }
-                  // 401 已由 on401Unauthorized 处理，不再调用 onFailure
                   return;
                 }
 
-                // 优先级 3：全局的 onFailure
                 if (config.onFailure != null) {
                   config.onFailure!(httpStatusCode, errorCode, errorMessage);
                 }
