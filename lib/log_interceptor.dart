@@ -61,6 +61,14 @@ class LogInterceptor extends dio_package.Interceptor {
     return '${timestamp.toString().substring(timestamp.toString().length - 6)}_${hashCode.toRadixString(36)}';
   }
 
+  /// 从响应 [Headers] 读取 `x-trace-id`（大小写不敏感，与 Dio 一致）
+  String? _xTraceIdFromHeaders(dio_package.Headers headers) {
+    final v = headers.value('x-trace-id');
+    if (v == null) return null;
+    final t = v.trim();
+    return t.isEmpty ? null : t;
+  }
+
   /// 格式化耗时
   String _formatDuration(Duration duration) {
     if (duration.inMilliseconds < 1000) {
@@ -268,6 +276,10 @@ class LogInterceptor extends dio_package.Interceptor {
       buffer.writeln('[HttpUtil] │ 📥 Response:');
       buffer.writeln(
           '[HttpUtil] │    Status: ${response.statusCode} ${response.statusMessage ?? ''}');
+      final traceId = _xTraceIdFromHeaders(response.headers);
+      if (traceId != null) {
+        buffer.writeln('[HttpUtil] │    x-trace-id: $traceId');
+      }
       if (printBody && response.data != null) {
         buffer.writeln('[HttpUtil] │    Body:');
         buffer.writeln('[HttpUtil] │      ${response.data}');
@@ -290,6 +302,10 @@ class LogInterceptor extends dio_package.Interceptor {
           '[HttpUtil] ┌─────────────────────────────────────────────────────────────');
       buffer.writeln(
           '[HttpUtil] │ Response: ${response.statusCode} ${response.statusMessage ?? ''}');
+      final traceIdRt = _xTraceIdFromHeaders(response.headers);
+      if (traceIdRt != null) {
+        buffer.writeln('[HttpUtil] │ x-trace-id: $traceIdRt');
+      }
       buffer.writeln(
           '[HttpUtil] │ Request: ${response.requestOptions.method} ${response.requestOptions.uri}');
       if (printBody && response.data != null) {
@@ -359,6 +375,10 @@ class LogInterceptor extends dio_package.Interceptor {
         final statusCode = error.response!.statusCode;
         buffer.writeln(
             '[HttpUtil] │    Status: $statusCode ${error.response!.statusMessage ?? ''}');
+        final traceIdErr = _xTraceIdFromHeaders(error.response!.headers);
+        if (traceIdErr != null) {
+          buffer.writeln('[HttpUtil] │    x-trace-id: $traceIdErr');
+        }
         if (printBody && error.response!.data != null) {
           buffer.writeln('[HttpUtil] │    Body:');
           buffer.writeln('[HttpUtil] │      ${error.response!.data}');
@@ -390,6 +410,10 @@ class LogInterceptor extends dio_package.Interceptor {
         final statusCode = error.response!.statusCode;
         buffer.writeln(
             '[HttpUtil] │ Response: $statusCode ${error.response!.statusMessage ?? ''}');
+        final traceIdErrRt = _xTraceIdFromHeaders(error.response!.headers);
+        if (traceIdErrRt != null) {
+          buffer.writeln('[HttpUtil] │ x-trace-id: $traceIdErrRt');
+        }
         if (printBody && error.response!.data != null) {
           buffer.writeln('[HttpUtil] │ Body:');
           buffer.writeln('[HttpUtil] │   ${error.response!.data}');
