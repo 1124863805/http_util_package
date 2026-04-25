@@ -1695,6 +1695,23 @@ class _SSEManagerImpl extends SSEManager {
     // 解析 baseUrl
     final resolvedBaseUrl = HttpUtilSafeCall._resolveBaseUrl(baseUrl, service);
 
+    // SSE 走 dart:io HttpClient，不经过 Dio / LogInterceptor；在 enableLogging 时单独打一行，避免与业务普通请求日志不一致。
+    if (config.enableLogging) {
+      if (config.logShowRequestHint) {
+        print('[HttpUtil] → $method $path  (SSE, not Dio)');
+        print('[HttpUtil]    baseUrl: $resolvedBaseUrl');
+      }
+      if (config.logPrintBody && data != null) {
+        String bodyLine;
+        try {
+          bodyLine = data is String ? data : jsonEncode(data);
+        } catch (_) {
+          bodyLine = '$data';
+        }
+        print('[HttpUtil]    body: $bodyLine');
+      }
+    }
+
     // 直接使用 SSEConnection.connect 建立连接
     final connection = await SSEConnection.connect(
       baseUrl: resolvedBaseUrl,
