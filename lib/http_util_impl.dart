@@ -16,6 +16,7 @@ import 'upload_file.dart';
 import 'download_response.dart';
 import 'sse/sse_event.dart';
 import 'sse/sse_connection.dart';
+import 'sse/sse_log.dart';
 import 'sse/sse_manager.dart';
 import 'widgets/loading_widget.dart';
 import 'request_deduplicator.dart';
@@ -1652,6 +1653,31 @@ extension HttpUtilSSE on HttpUtil {
   }
 }
 
+/// 与 [SSEClient._buildUri] 一致，供 [SseLog] 打印完整 URL。
+String _sseLogResolvedUri(
+  String baseUrl,
+  String path,
+  Map<String, String>? queryParameters,
+) {
+  final baseUri = Uri.parse(baseUrl);
+  final requestPath = path.startsWith('/') ? path : '/$path';
+  final basePath = baseUri.path;
+  final String fullPath;
+  if (basePath.isEmpty || basePath == '/') {
+    fullPath = requestPath;
+  } else {
+    final normalizedBase =
+        basePath.endsWith('/') ? basePath : '$basePath/';
+    final normalizedReq = requestPath.startsWith('/')
+        ? requestPath.substring(1)
+        : requestPath;
+    fullPath = '$normalizedBase$normalizedReq';
+  }
+  return baseUri
+      .replace(path: fullPath, queryParameters: queryParameters)
+      .toString();
+}
+
 /// SSE 管理器实现类（内部使用）
 class _SSEManagerImpl extends SSEManager {
   _SSEManagerImpl();
@@ -1694,44 +1720,62 @@ class _SSEManagerImpl extends SSEManager {
 
     // 解析 baseUrl
     final resolvedBaseUrl = HttpUtilSafeCall._resolveBaseUrl(baseUrl, service);
-
-    // SSE 走 dart:io HttpClient，不经过 Dio / LogInterceptor；在 enableLogging 时单独打一行，避免与业务普通请求日志不一致。
-    if (config.enableLogging) {
-      if (config.logShowRequestHint) {
-        print('[HttpUtil] → $method $path  (SSE, not Dio)');
-        print('[HttpUtil]    baseUrl: $resolvedBaseUrl');
-      }
-      if (config.logPrintBody && data != null) {
-        String bodyLine;
-        try {
-          bodyLine = data is String ? data : jsonEncode(data);
-        } catch (_) {
-          bodyLine = '$data';
-        }
-        print('[HttpUtil]    body: $bodyLine');
-      }
-    }
-
-    // 直接使用 SSEConnection.connect 建立连接
-    final connection = await SSEConnection.connect(
-      baseUrl: resolvedBaseUrl,
-      path: path,
-      method: method,
-      data: data,
-      queryParameters: queryParameters,
-      staticHeaders: config.staticHeaders,
-      dynamicHeaderBuilder: config.dynamicHeaderBuilder,
-      headers: headers,
+    final resolvedUri = _sseLogResolvedUri(
+      resolvedBaseUrl,
+      path,
+      queryParameters,
     );
+
+    final logSession = SseLog.begin(
+      method: method,
+      path: path,
+      url: resolvedUri,
+      data: data,
+      config: config,
+    );
+    SseLog.logRequestHint(logSession, config);
+    SseLog.logRequestRealTime(logSession, config);
+    SseLog.logRequestBrief(logSession, config);
+
+    SSEConnection connection;
+    try {
+      connection = await SSEConnection.connect(
+        baseUrl: resolvedBaseUrl,
+        path: path,
+        method: method,
+        data: data,
+        queryParameters: queryParameters,
+        staticHeaders: config.staticHeaders,
+        dynamicHeaderBuilder: config.dynamicHeaderBuilder,
+        headers: headers,
+      );
+      logSession.markConnected(
+        status: connection.httpStatus ?? 200,
+        contentType: connection.contentType,
+      );
+      logSession.contentTypeWarning = connection.contentTypeWarning;
+      logSession.traceId = connection.traceId;
+    } catch (e) {
+      await SseLog.logFailure(logSession, e, config, phase: 'connect');
+      rethrow;
+    }
 
     // 监听事件（包装 onDone 回调，在完成后标记连接完成）
     connection.listen(
-      onData: onData,
-      onError: onError,
+      onData: (event) {
+        logSession.recordEvent(event);
+        SseLog.logEventRealTime(logSession, event, config);
+        onData(event);
+      },
+      onError: (error) {
+        unawaited(
+          SseLog.logFailure(logSession, error, config, phase: 'stream'),
+        );
+        onError?.call(error);
+      },
       onDone: () {
-        // 先调用用户提供的 onDone 回调
+        SseLog.logStreamComplete(logSession, config);
         onDone?.call();
-        // 然后标记连接完成
         markConnectionDone(id);
       },
     );

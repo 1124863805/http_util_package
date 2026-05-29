@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.3] - 2026-05-29
+
+### Added
+- SSE 日志模块 `SseLog`：与 `LogInterceptor` 同风格（完整链路 / 实时 / 简要），支持 x-trace-id、事件统计
+- `SseHttpException`：SSE 建连 HTTP 非 2xx 时携带响应体、业务 code/reason/message 与 traceId
+
+### Changed
+- `LogInterceptor`：`POST /v1/events` 埋点请求使用独立前缀 `[HttpUtil_LOG]`，便于控制台检索
+- `SSEClient` / `SSEConnection`：暴露 `httpStatus`、`contentType`、`traceId` 及 Content-Type 警告
+
 ## [1.6.2] - 2026-04-24
 
 ### 维护

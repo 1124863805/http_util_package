@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 import 'sse_event.dart';
+import 'sse_http_exception.dart';
 import 'sse_stream.dart';
 
 /// SSE 客户端
@@ -23,8 +24,23 @@ class SSEClient {
   bool _isClosed = false;
   bool _isConnecting = false;
   bool _isConnected = false;
+  String? _contentTypeWarning;
+
   final StreamController<SSEEvent> _eventController =
       StreamController<SSEEvent>.broadcast();
+
+  int? get statusCode => _response?.statusCode;
+
+  String? get contentType => _response?.headers.value('content-type');
+
+  String? get traceId {
+    final h = _response?.headers;
+    if (h == null) return null;
+    return h.value('x-trace-id') ?? h.value('X-Trace-Id');
+  }
+
+  /// 非 `text/event-stream` 时的说明（由 [SseLog] 写入完整链路）。
+  String? get contentTypeWarning => _contentTypeWarning;
 
   SSEClient({
     required this.baseUrl,
@@ -88,19 +104,31 @@ class SSEClient {
       // 发送请求
       _response = await _request!.close();
 
-      // 检查响应状态
+      // 检查响应状态（非 200 时尽量读出响应体，便于排查业务错误码）
       if (_response!.statusCode != 200) {
-        throw HttpException(
-          'SSE 连接失败: HTTP ${_response!.statusCode}',
+        var errBody = '';
+        try {
+          errBody = await _response!.transform(utf8.decoder).join();
+          if (errBody.length > 2048) {
+            errBody = '${errBody.substring(0, 2048)}…';
+          }
+        } catch (_) {}
+        final parsed = SseHttpException.parseErrorBody(errBody);
+        throw SseHttpException(
+          statusCode: _response!.statusCode,
           uri: uri,
+          body: errBody.trim().isEmpty ? null : errBody,
+          traceId: SseHttpException.readTraceId(_response!.headers),
+          code: parsed?.code,
+          reason: parsed?.reason,
+          message: parsed?.message,
         );
       }
 
-      // 检查 Content-Type
       final contentType = _response!.headers.value('content-type');
       if (contentType == null || !contentType.contains('text/event-stream')) {
-        // 警告但不阻止，因为某些服务器可能不设置正确的 Content-Type
-        print('警告: 响应 Content-Type 不是 text/event-stream: $contentType');
+        _contentTypeWarning =
+            'Content-Type 非 text/event-stream: ${contentType ?? '(null)'}';
       }
 
       // 处理响应流

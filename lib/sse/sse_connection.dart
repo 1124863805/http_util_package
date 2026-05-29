@@ -12,6 +12,14 @@ class SSEConnection {
   /// 连接状态
   bool get isConnected => _isConnected;
 
+  int? get httpStatus => _client.statusCode;
+
+  String? get contentType => _client.contentType;
+
+  String? get traceId => _client.traceId;
+
+  String? get contentTypeWarning => _client.contentTypeWarning;
+
   /// 事件流（只读）
   Stream<SSEEvent> get events => _client.events;
 

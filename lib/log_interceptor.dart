@@ -78,15 +78,27 @@ class LogInterceptor extends dio_package.Interceptor {
     }
   }
 
+  static const String _defaultLogTag = '[HttpUtil]';
+  static const String _eventsLogTag = '[HttpUtil_LOG]';
+
+  /// 埋点网关 `POST /v1/events` 单独前缀，便于控制台检索。
+  String _logTag(dio_package.RequestOptions options) {
+    if (options.method.toUpperCase() == 'POST' &&
+        options.uri.path.endsWith('/v1/events')) {
+      return _eventsLogTag;
+    }
+    return _defaultLogTag;
+  }
+
   /// 将 Headers 追加到 StringBuffer（统一处理，确保所有 headers 都被打印）
   /// [indent] 缩进字符串，如 "│   " 或 "│      "
   /// 注意：此方法内部调用，不进行同步（由调用者负责同步）
   void _appendHeadersToStringBuffer(
       StringBuffer buffer, Map<String, dynamic> headers,
-      {String indent = '│      '}) {
+      {String indent = '│      ', required String logTag}) {
     if (headers.isEmpty) return;
 
-    buffer.writeln('[HttpUtil] ${indent}Headers:');
+    buffer.writeln('$logTag ${indent}Headers:');
     // 按字母顺序排序 headers，确保输出一致
     // 注意：创建新的 Map 来避免修改原始 headers
     final headersCopy = Map<String, dynamic>.from(headers);
@@ -102,7 +114,7 @@ class LogInterceptor extends dio_package.Interceptor {
         displayValue =
             'Bearer ${token.length > 20 ? '${token.substring(0, 20)}...' : token}';
       }
-      buffer.writeln('[HttpUtil] $indent$key: $displayValue');
+      buffer.writeln('$logTag $indent$key: $displayValue');
     });
   }
 
@@ -186,32 +198,35 @@ class LogInterceptor extends dio_package.Interceptor {
   /// 打印请求简要提示（完整链路模式使用）
   void _logRequestHint(dio_package.RequestOptions options, String requestId) {
     _synchronizedLog(() async {
-      print('[HttpUtil] → ${options.method} ${options.uri} [$requestId]');
+      final tag = _logTag(options);
+      print('$tag → ${options.method} ${options.uri} [$requestId]');
     });
   }
 
   /// 打印请求日志（实时模式使用）
   void _logRequest(dio_package.RequestOptions options) {
     _synchronizedLog(() async {
+      final tag = _logTag(options);
       // 使用 StringBuffer 收集所有日志内容，然后一次性输出
       final buffer = StringBuffer();
 
       buffer.writeln(
-          '[HttpUtil] ┌─────────────────────────────────────────────────────────────');
-      buffer.writeln('[HttpUtil] │ Request: ${options.method} ${options.uri}');
-      _appendHeadersToStringBuffer(buffer, options.headers, indent: '│   ');
+          '$tag ┌─────────────────────────────────────────────────────────────');
+      buffer.writeln('$tag │ Request: ${options.method} ${options.uri}');
+      _appendHeadersToStringBuffer(buffer, options.headers,
+          indent: '│   ', logTag: tag);
       if (printBody && options.data != null) {
-        buffer.writeln('[HttpUtil] │ Body:');
-        buffer.writeln('[HttpUtil] │   ${options.data}');
+        buffer.writeln('$tag │ Body:');
+        buffer.writeln('$tag │   ${options.data}');
       }
       if (options.queryParameters.isNotEmpty) {
-        buffer.writeln('[HttpUtil] │ Query Parameters:');
+        buffer.writeln('$tag │ Query Parameters:');
         options.queryParameters.forEach((key, value) {
-          buffer.writeln('[HttpUtil] │   $key: $value');
+          buffer.writeln('$tag │   $key: $value');
         });
       }
       buffer.writeln(
-          '[HttpUtil] └─────────────────────────────────────────────────────────────');
+          '$tag └─────────────────────────────────────────────────────────────');
 
       // 按行输出所有日志内容，避免单行过长被截断
       _printBuffer(buffer);
@@ -221,7 +236,8 @@ class LogInterceptor extends dio_package.Interceptor {
   /// 打印请求简要信息（简要模式使用）
   void _logRequestBrief(dio_package.RequestOptions options) {
     _synchronizedLog(() async {
-      print('[HttpUtil] → ${options.method} ${options.uri}');
+      final tag = _logTag(options);
+      print('$tag → ${options.method} ${options.uri}');
     });
   }
 
@@ -230,6 +246,7 @@ class LogInterceptor extends dio_package.Interceptor {
       {required bool isError}) {
     _synchronizedLog(() async {
       final options = response.requestOptions;
+      final tag = _logTag(options);
       final startTime = options.extra[_requestStartTimeKey] as DateTime?;
       final requestId = options.extra[_requestIdKey] as String? ?? 'unknown';
       final duration = startTime != null
@@ -252,40 +269,40 @@ class LogInterceptor extends dio_package.Interceptor {
       final buffer = StringBuffer();
 
       buffer.writeln(
-          '[HttpUtil] ┌─────────────────────────────────────────────────────────────');
+          '$tag ┌─────────────────────────────────────────────────────────────');
       buffer.writeln(
-          '[HttpUtil] │ [请求链路 #$requestId] ${options.method} ${options.uri} (耗时: ${_formatDuration(duration)}) $statusIcon');
+          '$tag │ [请求链路 #$requestId] ${options.method} ${options.uri} (耗时: ${_formatDuration(duration)}) $statusIcon');
       buffer.writeln(
-          '[HttpUtil] │ ───────────────────────────────────────────────────────────');
-      buffer.writeln('[HttpUtil] │ 📤 Request:');
-      buffer.writeln('[HttpUtil] │    Method: ${options.method}');
-      buffer.writeln('[HttpUtil] │    URL: ${options.uri}');
-      _appendHeadersToStringBuffer(buffer, headers);
+          '$tag │ ───────────────────────────────────────────────────────────');
+      buffer.writeln('$tag │ 📤 Request:');
+      buffer.writeln('$tag │    Method: ${options.method}');
+      buffer.writeln('$tag │    URL: ${options.uri}');
+      _appendHeadersToStringBuffer(buffer, headers, logTag: tag);
       if (printBody && options.data != null) {
-        buffer.writeln('[HttpUtil] │    Body:');
-        buffer.writeln('[HttpUtil] │      ${options.data}');
+        buffer.writeln('$tag │    Body:');
+        buffer.writeln('$tag │      ${options.data}');
       }
       if (options.queryParameters.isNotEmpty) {
-        buffer.writeln('[HttpUtil] │    Query Parameters:');
+        buffer.writeln('$tag │    Query Parameters:');
         options.queryParameters.forEach((key, value) {
-          buffer.writeln('[HttpUtil] │      $key: $value');
+          buffer.writeln('$tag │      $key: $value');
         });
       }
       buffer.writeln(
-          '[HttpUtil] │ ───────────────────────────────────────────────────────────');
-      buffer.writeln('[HttpUtil] │ 📥 Response:');
+          '$tag │ ───────────────────────────────────────────────────────────');
+      buffer.writeln('$tag │ 📥 Response:');
       buffer.writeln(
-          '[HttpUtil] │    Status: ${response.statusCode} ${response.statusMessage ?? ''}');
+          '$tag │    Status: ${response.statusCode} ${response.statusMessage ?? ''}');
       final traceId = _xTraceIdFromHeaders(response.headers);
       if (traceId != null) {
-        buffer.writeln('[HttpUtil] │    x-trace-id: $traceId');
+        buffer.writeln('$tag │    x-trace-id: $traceId');
       }
       if (printBody && response.data != null) {
-        buffer.writeln('[HttpUtil] │    Body:');
-        buffer.writeln('[HttpUtil] │      ${response.data}');
+        buffer.writeln('$tag │    Body:');
+        buffer.writeln('$tag │      ${response.data}');
       }
       buffer.writeln(
-          '[HttpUtil] └─────────────────────────────────────────────────────────────');
+          '$tag └─────────────────────────────────────────────────────────────');
 
       // 按行输出所有日志内容，避免单行过长被截断
       _printBuffer(buffer);
@@ -295,25 +312,26 @@ class LogInterceptor extends dio_package.Interceptor {
   /// 打印响应日志（实时模式使用）
   void _logResponse(dio_package.Response response) {
     _synchronizedLog(() async {
+      final tag = _logTag(response.requestOptions);
       // 使用 StringBuffer 收集所有日志内容，然后一次性输出
       final buffer = StringBuffer();
 
       buffer.writeln(
-          '[HttpUtil] ┌─────────────────────────────────────────────────────────────');
+          '$tag ┌─────────────────────────────────────────────────────────────');
       buffer.writeln(
-          '[HttpUtil] │ Response: ${response.statusCode} ${response.statusMessage ?? ''}');
+          '$tag │ Response: ${response.statusCode} ${response.statusMessage ?? ''}');
       final traceIdRt = _xTraceIdFromHeaders(response.headers);
       if (traceIdRt != null) {
-        buffer.writeln('[HttpUtil] │ x-trace-id: $traceIdRt');
+        buffer.writeln('$tag │ x-trace-id: $traceIdRt');
       }
       buffer.writeln(
-          '[HttpUtil] │ Request: ${response.requestOptions.method} ${response.requestOptions.uri}');
+          '$tag │ Request: ${response.requestOptions.method} ${response.requestOptions.uri}');
       if (printBody && response.data != null) {
-        buffer.writeln('[HttpUtil] │ Body:');
-        buffer.writeln('[HttpUtil] │   ${response.data}');
+        buffer.writeln('$tag │ Body:');
+        buffer.writeln('$tag │   ${response.data}');
       }
       buffer.writeln(
-          '[HttpUtil] └─────────────────────────────────────────────────────────────');
+          '$tag └─────────────────────────────────────────────────────────────');
 
       // 按行输出所有日志内容，避免单行过长被截断
       _printBuffer(buffer);
@@ -323,14 +341,15 @@ class LogInterceptor extends dio_package.Interceptor {
   /// 打印响应简要信息（简要模式使用）
   void _logResponseBrief(dio_package.Response response) {
     _synchronizedLog(() async {
-      final startTime =
-          response.requestOptions.extra[_requestStartTimeKey] as DateTime?;
+      final opts = response.requestOptions;
+      final tag = _logTag(opts);
+      final startTime = opts.extra[_requestStartTimeKey] as DateTime?;
       final duration = startTime != null
           ? DateTime.now().difference(startTime)
           : Duration.zero;
 
       print(
-          '[HttpUtil] ← ${response.statusCode} ${response.requestOptions.uri} (${_formatDuration(duration)})');
+          '$tag ← ${response.statusCode} ${opts.uri} (${_formatDuration(duration)})');
     });
   }
 
@@ -338,6 +357,7 @@ class LogInterceptor extends dio_package.Interceptor {
   void _logCompleteChainError(dio_package.DioException error) {
     _synchronizedLog(() async {
       final options = error.requestOptions;
+      final tag = _logTag(options);
       final startTime = options.extra[_requestStartTimeKey] as DateTime?;
       final requestId = options.extra[_requestIdKey] as String? ?? 'unknown';
       final duration = startTime != null
@@ -348,47 +368,47 @@ class LogInterceptor extends dio_package.Interceptor {
       final buffer = StringBuffer();
 
       buffer.writeln(
-          '[HttpUtil] ┌─────────────────────────────────────────────────────────────');
+          '$tag ┌─────────────────────────────────────────────────────────────');
       buffer.writeln(
-          '[HttpUtil] │ [请求链路 #$requestId] ${options.method} ${options.uri} (耗时: ${_formatDuration(duration)}) ❌');
+          '$tag │ [请求链路 #$requestId] ${options.method} ${options.uri} (耗时: ${_formatDuration(duration)}) ❌');
       buffer.writeln(
-          '[HttpUtil] │ ───────────────────────────────────────────────────────────');
-      buffer.writeln('[HttpUtil] │ 📤 Request:');
-      buffer.writeln('[HttpUtil] │    Method: ${options.method}');
-      buffer.writeln('[HttpUtil] │    URL: ${options.uri}');
-      _appendHeadersToStringBuffer(buffer, options.headers);
+          '$tag │ ───────────────────────────────────────────────────────────');
+      buffer.writeln('$tag │ 📤 Request:');
+      buffer.writeln('$tag │    Method: ${options.method}');
+      buffer.writeln('$tag │    URL: ${options.uri}');
+      _appendHeadersToStringBuffer(buffer, options.headers, logTag: tag);
       if (printBody && options.data != null) {
-        buffer.writeln('[HttpUtil] │    Body:');
-        buffer.writeln('[HttpUtil] │      ${options.data}');
+        buffer.writeln('$tag │    Body:');
+        buffer.writeln('$tag │      ${options.data}');
       }
       if (options.queryParameters.isNotEmpty) {
-        buffer.writeln('[HttpUtil] │    Query Parameters:');
+        buffer.writeln('$tag │    Query Parameters:');
         options.queryParameters.forEach((key, value) {
-          buffer.writeln('[HttpUtil] │      $key: $value');
+          buffer.writeln('$tag │      $key: $value');
         });
       }
       buffer.writeln(
-          '[HttpUtil] │ ───────────────────────────────────────────────────────────');
-      buffer.writeln('[HttpUtil] │ ❌ Error:');
-      buffer.writeln('[HttpUtil] │    Type: ${error.type.toString()}');
+          '$tag │ ───────────────────────────────────────────────────────────');
+      buffer.writeln('$tag │ ❌ Error:');
+      buffer.writeln('$tag │    Type: ${error.type.toString()}');
       if (error.response != null) {
         final statusCode = error.response!.statusCode;
         buffer.writeln(
-            '[HttpUtil] │    Status: $statusCode ${error.response!.statusMessage ?? ''}');
+            '$tag │    Status: $statusCode ${error.response!.statusMessage ?? ''}');
         final traceIdErr = _xTraceIdFromHeaders(error.response!.headers);
         if (traceIdErr != null) {
-          buffer.writeln('[HttpUtil] │    x-trace-id: $traceIdErr');
+          buffer.writeln('$tag │    x-trace-id: $traceIdErr');
         }
         if (printBody && error.response!.data != null) {
-          buffer.writeln('[HttpUtil] │    Body:');
-          buffer.writeln('[HttpUtil] │      ${error.response!.data}');
+          buffer.writeln('$tag │    Body:');
+          buffer.writeln('$tag │      ${error.response!.data}');
         }
       }
       if (error.message != null) {
-        buffer.writeln('[HttpUtil] │    Message: ${error.message!}');
+        buffer.writeln('$tag │    Message: ${error.message!}');
       }
       buffer.writeln(
-          '[HttpUtil] └─────────────────────────────────────────────────────────────');
+          '$tag └─────────────────────────────────────────────────────────────');
 
       // 按行输出所有日志内容，避免单行过长被截断
       _printBuffer(buffer);
@@ -398,32 +418,33 @@ class LogInterceptor extends dio_package.Interceptor {
   /// 打印错误日志（实时模式使用）
   void _logError(dio_package.DioException error) {
     _synchronizedLog(() async {
+      final tag = _logTag(error.requestOptions);
       // 使用 StringBuffer 收集所有日志内容，然后一次性输出
       final buffer = StringBuffer();
 
       buffer.writeln(
-          '[HttpUtil] ┌─────────────────────────────────────────────────────────────');
-      buffer.writeln('[HttpUtil] │ Error: ${error.type.toString()}');
+          '$tag ┌─────────────────────────────────────────────────────────────');
+      buffer.writeln('$tag │ Error: ${error.type.toString()}');
       buffer.writeln(
-          '[HttpUtil] │ Request: ${error.requestOptions.method} ${error.requestOptions.uri}');
+          '$tag │ Request: ${error.requestOptions.method} ${error.requestOptions.uri}');
       if (error.response != null) {
         final statusCode = error.response!.statusCode;
         buffer.writeln(
-            '[HttpUtil] │ Response: $statusCode ${error.response!.statusMessage ?? ''}');
+            '$tag │ Response: $statusCode ${error.response!.statusMessage ?? ''}');
         final traceIdErrRt = _xTraceIdFromHeaders(error.response!.headers);
         if (traceIdErrRt != null) {
-          buffer.writeln('[HttpUtil] │ x-trace-id: $traceIdErrRt');
+          buffer.writeln('$tag │ x-trace-id: $traceIdErrRt');
         }
         if (printBody && error.response!.data != null) {
-          buffer.writeln('[HttpUtil] │ Body:');
-          buffer.writeln('[HttpUtil] │   ${error.response!.data}');
+          buffer.writeln('$tag │ Body:');
+          buffer.writeln('$tag │   ${error.response!.data}');
         }
       }
       if (error.message != null) {
-        buffer.writeln('[HttpUtil] │    Message: ${error.message!}');
+        buffer.writeln('$tag │    Message: ${error.message!}');
       }
       buffer.writeln(
-          '[HttpUtil] └─────────────────────────────────────────────────────────────');
+          '$tag └─────────────────────────────────────────────────────────────');
 
       // 按行输出所有日志内容，避免单行过长被截断
       _printBuffer(buffer);
@@ -433,14 +454,15 @@ class LogInterceptor extends dio_package.Interceptor {
   /// 打印错误简要信息（简要模式使用）
   void _logErrorBrief(dio_package.DioException error) {
     _synchronizedLog(() async {
-      final startTime =
-          error.requestOptions.extra[_requestStartTimeKey] as DateTime?;
+      final opts = error.requestOptions;
+      final tag = _logTag(opts);
+      final startTime = opts.extra[_requestStartTimeKey] as DateTime?;
       final duration = startTime != null
           ? DateTime.now().difference(startTime)
           : Duration.zero;
 
       print(
-          '[HttpUtil] ✗ ${error.type.toString()} ${error.requestOptions.uri} (${_formatDuration(duration)})');
+          '$tag ✗ ${error.type.toString()} ${opts.uri} (${_formatDuration(duration)})');
     });
   }
 }
