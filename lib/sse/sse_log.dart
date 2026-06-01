@@ -104,11 +104,11 @@ class SseLogSession {
   }
 }
 
-/// SSE 日志（格式与 [LogInterceptor] / `[HttpUtil]` 保持一致）。
+/// SSE 日志（格式与 [LogInterceptor] 一致，前缀 `[HttpUtil_SSE]` 便于过滤）。
 abstract final class SseLog {
   SseLog._();
 
-  static const String tag = '[HttpUtil]';
+  static const String tag = '[HttpUtil_SSE]';
   static const String _top =
       '┌─────────────────────────────────────────────────────────────';
   static const String _sep =
@@ -222,13 +222,52 @@ abstract final class SseLog {
     });
   }
 
-  /// 实时模式：单条非 delta 事件。
-  static void logEventRealTime(
+  /// 完整链路模式：建连成功后立即打印 HTTP 摘要（不等流结束）。
+  static void logStreamOpened(SseLogSession session, HttpConfig config) {
+    if (!config.enableLogging || config.logMode != LogMode.complete) return;
+    _synchronized(() async {
+      final b = StringBuffer();
+      b.writeln('$tag $_top');
+      b.writeln(
+        '$tag │ [SSE建连 #${session.requestId}] ${session.method} '
+        '${session.url} (${_formatDuration(session.elapsed)}) ✅',
+      );
+      b.writeln('$tag $_sep');
+      b.writeln('$tag │ 📤 Request (SSE):');
+      b.writeln('$tag │    Method: ${session.method}');
+      b.writeln('$tag │    URL: ${session.url}');
+      if (session.body != null) {
+        b.writeln('$tag │    Body:');
+        b.writeln('$tag │      ${session.body}');
+      }
+      b.writeln('$tag $_sep');
+      b.writeln('$tag │ 📡 Stream opened:');
+      b.writeln('$tag │    HTTP: ${session.httpStatus ?? 200}');
+      if (session.contentType != null) {
+        b.writeln('$tag │    Content-Type: ${session.contentType}');
+      }
+      if (session.contentTypeWarning != null) {
+        b.writeln('$tag │    ⚠️ ${session.contentTypeWarning}');
+      }
+      if (session.traceId != null) {
+        b.writeln('$tag │    x-trace-id: ${session.traceId}');
+      }
+      b.writeln('$tag $_bottom');
+      _printBuffer(b);
+    });
+  }
+
+  /// 流式事件：complete / realTime 下打印非 delta 事件（delta 仅计入汇总）。
+  static void logEventLive(
     SseLogSession session,
     SSEEvent event,
     HttpConfig config,
   ) {
-    if (!config.enableLogging || config.logMode != LogMode.realTime) return;
+    if (!config.enableLogging) return;
+    if (config.logMode != LogMode.complete &&
+        config.logMode != LogMode.realTime) {
+      return;
+    }
     var type = (event.event ?? '').trim();
     if (type.isEmpty) {
       type = SseLogSession._inferEventTypeFromData(event.data);
@@ -243,6 +282,13 @@ abstract final class SseLog {
       );
     });
   }
+
+  /// 实时模式：单条非 delta 事件（兼容旧名）。
+  static void logEventRealTime(
+    SseLogSession session,
+    SSEEvent event,
+    HttpConfig config,
+  ) => logEventLive(session, event, config);
 
   /// 流正常结束：打印完整链路（complete）或简要行（brief）。
   static void logStreamComplete(SseLogSession session, HttpConfig config) {

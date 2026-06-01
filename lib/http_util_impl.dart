@@ -1682,6 +1682,28 @@ String _sseLogResolvedUri(
 class _SSEManagerImpl extends SSEManager {
   _SSEManagerImpl();
 
+  final Map<String, SseLogSession> _logSessions = {};
+  final Set<String> _logFinalized = {};
+
+  Future<void> _finalizeSseLog(
+    String id, {
+    required bool success,
+    Object? error,
+    String phase = 'stream',
+  }) async {
+    if (_logFinalized.contains(id)) return;
+    _logFinalized.add(id);
+    final session = _logSessions.remove(id);
+    if (session == null) return;
+    final config = HttpUtilSafeCall._config;
+    if (config == null || !config.enableLogging) return;
+    if (success) {
+      SseLog.logStreamComplete(session, config);
+    } else if (error != null) {
+      await SseLog.logFailure(session, error, config, phase: phase);
+    }
+  }
+
   @override
   Future<String> connect({
     required String id,
@@ -1733,6 +1755,8 @@ class _SSEManagerImpl extends SSEManager {
       data: data,
       config: config,
     );
+    _logSessions[id] = logSession;
+    _logFinalized.remove(id);
     SseLog.logRequestHint(logSession, config);
     SseLog.logRequestRealTime(logSession, config);
     SseLog.logRequestBrief(logSession, config);
@@ -1755,7 +1779,10 @@ class _SSEManagerImpl extends SSEManager {
       );
       logSession.contentTypeWarning = connection.contentTypeWarning;
       logSession.traceId = connection.traceId;
+      SseLog.logStreamOpened(logSession, config);
     } catch (e) {
+      _logSessions.remove(id);
+      _logFinalized.add(id);
       await SseLog.logFailure(logSession, e, config, phase: 'connect');
       rethrow;
     }
@@ -1764,17 +1791,17 @@ class _SSEManagerImpl extends SSEManager {
     connection.listen(
       onData: (event) {
         logSession.recordEvent(event);
-        SseLog.logEventRealTime(logSession, event, config);
+        SseLog.logEventLive(logSession, event, config);
         onData(event);
       },
       onError: (error) {
         unawaited(
-          SseLog.logFailure(logSession, error, config, phase: 'stream'),
+          _finalizeSseLog(id, success: false, error: error, phase: 'stream'),
         );
         onError?.call(error);
       },
       onDone: () {
-        SseLog.logStreamComplete(logSession, config);
+        unawaited(_finalizeSseLog(id, success: true));
         onDone?.call();
         markConnectionDone(id);
       },
@@ -1783,10 +1810,10 @@ class _SSEManagerImpl extends SSEManager {
     // 保存连接对象
     addConnection(id, connection);
 
-    // 创建取消函数
+    // 创建取消函数（业务 disconnect 时也要收尾日志，避免 onDone 未触发）
     addCancelFunction(id, () async {
+      await _finalizeSseLog(id, success: true);
       await connection.disconnect();
-      // 断开连接时也标记完成
       markConnectionDone(id);
     });
 
